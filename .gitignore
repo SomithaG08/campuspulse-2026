@@ -1,0 +1,47 @@
+# --- Secrets and credentials: never commit these ---
+.env
+.env.*
+*.pem
+*.key
+*.ppk
+credentials
+aws_credentials
+.aws/
+*.tfvars
+!example.tfvars
+
+# --- Terraform ---
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+.terraform.lock.hcl
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+dist/
+build/
+
+# --- Node ---
+node_modules/
+npm-debug.log*
+
+# --- Packaging artifacts ---
+*.zip
+lambda_package/
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp
