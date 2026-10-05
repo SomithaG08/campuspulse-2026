@@ -1,0 +1,279 @@
+{
+  "run_at": "2026-10-05T13:04:16Z",
+  "api": "https://wsjs04q4yi.execute-api.eu-west-3.amazonaws.com",
+  "passed": 45,
+  "failed": 0,
+  "total": 45,
+  "results": [
+    {
+      "id": "T1.1",
+      "description": "GET /health returns 200 without a token",
+      "status": "PASS",
+      "detail": "got 200"
+    },
+    {
+      "id": "T1.2",
+      "description": "health reports a version",
+      "status": "PASS",
+      "detail": "{'status': 'ok', 'version': '0.1.0', 'stage': 'dev'}"
+    },
+    {
+      "id": "T2.1",
+      "description": "valid ops credentials return a token",
+      "status": "PASS",
+      "detail": "got 200: "
+    },
+    {
+      "id": "T2.2",
+      "description": "login reports the ops role",
+      "status": "PASS",
+      "detail": "ops"
+    },
+    {
+      "id": "T2.3",
+      "description": "valid staff credentials return a token",
+      "status": "PASS",
+      "detail": "got 200: "
+    },
+    {
+      "id": "T2.4",
+      "description": "login reports the staff role",
+      "status": "PASS",
+      "detail": "staff"
+    },
+    {
+      "id": "T2.5",
+      "description": "wrong password is rejected with 401",
+      "status": "PASS",
+      "detail": "got 401"
+    },
+    {
+      "id": "T2.6",
+      "description": "unknown user is rejected with 401",
+      "status": "PASS",
+      "detail": "got 401"
+    },
+    {
+      "id": "T2.7",
+      "description": "wrong password and unknown user give the SAME message (no account enumeration)",
+      "status": "PASS",
+      "detail": "'Incorrect username or password' vs 'Incorrect username or password'"
+    },
+    {
+      "id": "T2.8",
+      "description": "missing password is rejected with 400",
+      "status": "PASS",
+      "detail": "got 400"
+    },
+    {
+      "id": "T3.1",
+      "description": "POST /events without a token returns 401",
+      "status": "PASS",
+      "detail": "got 401"
+    },
+    {
+      "id": "T3.2",
+      "description": "GET /stats without a token returns 401",
+      "status": "PASS",
+      "detail": "got 401"
+    },
+    {
+      "id": "T3.3",
+      "description": "staff CANNOT submit events (403)",
+      "status": "PASS",
+      "detail": "got 403"
+    },
+    {
+      "id": "T3.4",
+      "description": "staff CANNOT read alerts (403)",
+      "status": "PASS",
+      "detail": "got 403"
+    },
+    {
+      "id": "T3.5",
+      "description": "staff CAN read events (200)",
+      "status": "PASS",
+      "detail": "got 200"
+    },
+    {
+      "id": "T3.6",
+      "description": "staff CAN read statistics (200)",
+      "status": "PASS",
+      "detail": "got 200"
+    },
+    {
+      "id": "T3.7",
+      "description": "ops CAN read alerts (200)",
+      "status": "PASS",
+      "detail": "got 200"
+    },
+    {
+      "id": "T3.8",
+      "description": "a malformed token returns 401",
+      "status": "PASS",
+      "detail": "got 401"
+    },
+    {
+      "id": "T4.1",
+      "description": "a valid event is stored (201)",
+      "status": "PASS",
+      "detail": "got 201: {'event_id': 'test-1791205454509', 'severity': 'normal', 'reason': 'occupancy 10 is within capacity 45', 'alert': False, 'stored_at': '2026-10-05T13:04:13Z'}"
+    },
+    {
+      "id": "T4.2",
+      "description": "a normal event is classified normal",
+      "status": "PASS",
+      "detail": "{'event_id': 'test-1791205454509', 'severity': 'normal', 'reason': 'occupancy 10 is within capacity 45', 'alert': False, 'stored_at': '2026-10-05T13:04:13Z'}"
+    },
+    {
+      "id": "T4.3",
+      "description": "an over-capacity event is stored (201)",
+      "status": "PASS",
+      "detail": "got 201"
+    },
+    {
+      "id": "T4.4",
+      "description": "SERVER OVERRULES the client's severity -> critical",
+      "status": "PASS",
+      "detail": "{'event_id': 'test-1791205454610', 'severity': 'critical', 'reason': 'occupancy 58 exceeds 120% of capacity 45', 'alert': True, 'stored_at': '2026-10-05T13:04:13Z'}"
+    },
+    {
+      "id": "T4.5",
+      "description": "the alert carries a human-readable reason",
+      "status": "PASS",
+      "detail": "occupancy 58 exceeds 120% of capacity 45"
+    },
+    {
+      "id": "T4.6",
+      "description": "staff CAN raise a service request (201)",
+      "status": "PASS",
+      "detail": "got 201: {'event_id': 'req-1791205453930', 'severity': 'critical', 'reason': 'service request reported as urgent', 'alert': True, 'stored_at': '2026-10-05T13:04:13Z'}"
+    },
+    {
+      "id": "T4.7",
+      "description": "an urgent request is critical",
+      "status": "PASS",
+      "detail": "{'event_id': 'req-1791205453930', 'severity': 'critical', 'reason': 'service request reported as urgent', 'alert': True, 'stored_at': '2026-10-05T13:04:13Z'}"
+    },
+    {
+      "id": "T5.1",
+      "description": "missing required field -> 400",
+      "status": "PASS",
+      "detail": "got 400: building is required"
+    },
+    {
+      "id": "T5.2",
+      "description": "wrong unit for the event type -> 400",
+      "status": "PASS",
+      "detail": "got 400: unit for temperature must be 'celsius', got 'fahrenheit'"
+    },
+    {
+      "id": "T5.3",
+      "description": "non-numeric value -> 400",
+      "status": "PASS",
+      "detail": "got 400: value must be a number"
+    },
+    {
+      "id": "T5.4",
+      "description": "unknown building -> 400",
+      "status": "PASS",
+      "detail": "got 400: unknown building: Hogwarts"
+    },
+    {
+      "id": "T5.5",
+      "description": "unknown room -> 400",
+      "status": "PASS",
+      "detail": "got 400: unknown room Z999 in Library-A"
+    },
+    {
+      "id": "T5.6",
+      "description": "implausible value -> 400",
+      "status": "PASS",
+      "detail": "got 400: temperature value 4000.0 is outside the plausible range -20.0 to 60.0"
+    },
+    {
+      "id": "T5.7",
+      "description": "timestamp in the future -> 400",
+      "status": "PASS",
+      "detail": "got 400: timestamp is in the future"
+    },
+    {
+      "id": "T5.8",
+      "description": "timestamp older than 24 hours -> 400",
+      "status": "PASS",
+      "detail": "got 400: timestamp is older than 24 hours"
+    },
+    {
+      "id": "T5.9",
+      "description": "limit above the maximum -> 400",
+      "status": "PASS",
+      "detail": "got 400"
+    },
+    {
+      "id": "T5.10",
+      "description": "malformed date -> 400",
+      "status": "PASS",
+      "detail": "got 400"
+    },
+    {
+      "id": "T5.11",
+      "description": "rejections include a useful message",
+      "status": "PASS",
+      "detail": "{'error': 'ValidationError', 'message': 'date must be in YYYY-MM-DD format', 'request_id': 'dc78a06a-d954-4386-88da-4856cda07e40'}"
+    },
+    {
+      "id": "T6.1",
+      "description": "GET /events returns a list",
+      "status": "PASS",
+      "detail": "got 200"
+    },
+    {
+      "id": "T6.2",
+      "description": "events are newest first",
+      "status": "PASS",
+      "detail": "ordering wrong"
+    },
+    {
+      "id": "T6.3",
+      "description": "filtering by building returns only that building",
+      "status": "PASS",
+      "detail": "got 200"
+    },
+    {
+      "id": "T6.4",
+      "description": "GET /alerts returns only abnormal events",
+      "status": "PASS",
+      "detail": "got 200"
+    },
+    {
+      "id": "T6.5",
+      "description": "GET /stats returns every documented field",
+      "status": "PASS",
+      "detail": "missing: []"
+    },
+    {
+      "id": "T6.6",
+      "description": "statistics reflect the events we just submitted",
+      "status": "PASS",
+      "detail": "26"
+    },
+    {
+      "id": "T7.1",
+      "description": "the critical event submitted in T4 appears in /alerts",
+      "status": "PASS",
+      "detail": "looking for test-1791205454610"
+    },
+    {
+      "id": "T7.2",
+      "description": "the same event appears in /events",
+      "status": "PASS",
+      "detail": "looking for test-1791205454610"
+    },
+    {
+      "id": "T7.3",
+      "description": "the alert is counted in the statistics",
+      "status": "PASS",
+      "detail": "alert_count=10"
+    }
+  ]
+}
