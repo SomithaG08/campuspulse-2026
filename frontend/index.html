@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<!--
+  CampusPulse 2026 - operations dashboard.
+
+  No framework, no build step, no dependencies. Three files: this one, style.css
+  and app.js. Every teammate can read all of it, and nothing can break on demo
+  day because a package would not install.
+
+  It holds no data of its own: everything on screen arrives from the API, which
+  refuses to answer without a valid Cognito token. That is why this page can sit
+  in a public S3 bucket safely - see docs/security/01-threat-model.md, T5.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CampusPulse 2026</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body data-palette="#0ca30c,#fab219,#d03b3b">
+
+<header class="topbar">
+  <div class="brand">
+    <span class="dot" aria-hidden="true"></span>
+    <h1>CampusPulse <span class="year">2026</span></h1>
+    <span class="campus">NorthBridge University</span>
+  </div>
+  <div class="session" id="session" hidden>
+    <span id="who" class="who"></span>
+    <button id="refresh" class="btn-ghost" type="button">Refresh</button>
+    <button id="logout" class="btn-ghost" type="button">Sign out</button>
+  </div>
+</header>
+
+<!-- ───────────────────────── login ───────────────────────── -->
+<main id="login-view" class="login-view">
+  <form id="login-form" class="card login-card" autocomplete="on">
+    <h2>Sign in</h2>
+    <p class="muted">Campus operations staff only.</p>
+
+    <label for="username">Email</label>
+    <input id="username" name="username" type="email" required
+           autocomplete="username" placeholder="ops@northbridge.edu">
+
+    <label for="password">Password</label>
+    <input id="password" name="password" type="password" required
+           autocomplete="current-password">
+
+    <button id="login-btn" class="btn" type="submit">Sign in</button>
+    <p id="login-error" class="error" role="alert" hidden></p>
+  </form>
+</main>
+
+<!-- ───────────────────────── dashboard ───────────────────────── -->
+<main id="dash-view" class="dash" hidden>
+
+  <div id="banner" class="banner" role="status" hidden></div>
+
+  <!-- KPI row. These are stat tiles, not charts: a single number each, so
+       there is nothing to plot and no legend to show. -->
+  <section class="tiles" aria-label="Campus summary">
+    <div class="tile">
+      <span class="tile-label">Events today</span>
+      <span class="tile-value" id="kpi-events">–</span>
+    </div>
+    <div class="tile">
+      <span class="tile-label">Active alerts</span>
+      <span class="tile-value" id="kpi-alerts">–</span>
+    </div>
+    <div class="tile">
+      <span class="tile-label">Critical</span>
+      <span class="tile-value status-critical" id="kpi-critical">–</span>
+    </div>
+    <div class="tile">
+      <span class="tile-label">Urgent requests</span>
+      <span class="tile-value" id="kpi-urgent">–</span>
+    </div>
+    <div class="tile">
+      <span class="tile-label">Highest energy use</span>
+      <span class="tile-value tile-text" id="kpi-energy">–</span>
+    </div>
+  </section>
+
+  <div class="grid">
+
+    <!-- Alerts: ops only. Hidden entirely for staff, who get a 403 here. -->
+    <section class="card" id="alerts-card">
+      <div class="card-head">
+        <h2>Active alerts</h2>
+        <span class="count" id="alerts-count"></span>
+      </div>
+      <div id="alerts-body" class="scroll">
+        <p class="muted">Loading…</p>
+      </div>
+    </section>
+
+    <!-- Occupancy: magnitude, one series, so no legend - the title names it.
+         Bars under capacity use the sequential blue; over capacity they take a
+         status colour AND a written label, so colour never carries the meaning
+         on its own. -->
+    <section class="card">
+      <div class="card-head">
+        <h2>Room occupancy</h2>
+        <span class="count muted">latest reading per room</span>
+      </div>
+      <div id="occupancy-body" class="scroll">
+        <p class="muted">Loading…</p>
+      </div>
+    </section>
+
+    <!-- Energy: magnitude, one series, one hue. Each bar is directly labelled,
+         which replaces an axis on a five-bar chart. -->
+    <section class="card">
+      <div class="card-head">
+        <h2>Energy use by building</h2>
+        <span class="count muted">kWh today</span>
+      </div>
+      <div id="energy-body">
+        <p class="muted">Loading…</p>
+      </div>
+    </section>
+
+    <section class="card wide">
+      <div class="card-head">
+        <h2>Recent events</h2>
+        <span class="count" id="events-count"></span>
+      </div>
+      <div class="scroll">
+        <table class="events">
+          <thead>
+            <tr>
+              <th scope="col">Time (UTC)</th>
+              <th scope="col">Location</th>
+              <th scope="col">Type</th>
+              <th scope="col" class="num">Value</th>
+              <th scope="col">Severity</th>
+            </tr>
+          </thead>
+          <tbody id="events-body">
+            <tr><td colspan="5" class="muted">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </div>
+
+  <footer class="foot">
+    <span id="updated" class="muted"></span>
+    <span id="poll-state" class="muted"></span>
+  </footer>
+</main>
+
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+# Intentionally empty: the simulator uses only the Python standard library.
+#
+# `requests` would make the HTTP code a few lines shorter, but "no pip install"
+# means every teammate can run this immediately and nothing can fail on demo
+# day because a dependency would not install. For a tool whose entire purpose
+# is to work during a live demonstration, that trade is worth it.
+#
+# Python 3.9 or newer.
