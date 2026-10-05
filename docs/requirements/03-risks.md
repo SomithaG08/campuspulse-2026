@@ -39,7 +39,7 @@ Every risk has an owner-to-be-named and a mitigation that is an action, not a ho
 
 | ID | Risk | Likelihood | Severity | Mitigation |
 |---|---|---|---|---|
-| N1 | Components built separately do not fit together (simulator payload ≠ API schema ≠ dashboard expectation) | High | High | The event schema is frozen in Phase 2 and written into `docs/architecture/data-model.md`; every component is coded against that one document; one shared example event used in all tests |
+| N1 | Components built separately do not fit together (simulator payload ≠ API schema ≠ dashboard expectation) | High | High | The event schema is frozen in Phase 2 and written into `docs/architecture/04-data-model.md`; every component is coded against that one document; one shared example event used in all tests |
 | N2 | Auth is bolted on last and breaks the working dashboard | Medium | Medium | Design the token flow in Phase 2 and stub it in Phase 5, even though it is implemented in Phase 7 |
 | N3 | Everyone works in one AWS account and overwrites each other's resources | Medium | Medium | Name-prefix convention per person for experiments; only one person runs the "official" deploy |
 

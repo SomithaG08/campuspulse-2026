@@ -140,7 +140,11 @@ Terms are grouped, not alphabetical, because they make more sense in families. U
 
 **Metric** — a number over time. *Ours:* `EventsIngested`, `AlertsRaised`.
 
-**Alarm** — a rule that watches a metric and changes state when it crosses a threshold. *Ours:* three.
+**Alarm** — a rule that watches a metric and changes state when it crosses a threshold. *Ours:* four.
+
+**EMF (Embedded Metric Format)** — a specially shaped log line that CloudWatch reads as a metric. *Ours:* how we publish `EventsIngested` and `AlertsRaised` without paying for `PutMetricData` calls — the log we were writing anyway becomes the metric.
+
+**p95** — the value 95% of measurements fall below. *Ours:* the latency widget. An average hides a slow tail; p95 says what almost everyone actually experienced, cold starts included.
 
 **Dashboard** — a screen of graphs. We have two different ones: the CloudWatch dashboard (for us, about the system) and the CampusPulse dashboard (for the operations team, about the campus). Do not mix them up on a slide.
 
