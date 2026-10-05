@@ -140,7 +140,7 @@ The spec (§9) asks the diagram to show "networking configuration including VPC,
 
 **The cost consequence is the headline:** a private-subnet design needs a **NAT Gateway** to reach anything outside the VPC, billed per hour plus per GB — roughly $30-35 per month for a resource that would do nothing for us. On a 100-credit budget that one component could consume a third of the budget in a month of idling. Choosing managed services avoids it entirely.
 
-`docs/architecture/networking.md` (Phase 4) will teach VPC/subnet/security-group properly and show what our architecture *would* look like on EC2, so the team can answer VPC questions at the oral even though we did not build one.
+`docs/learning/11-networking-explained.md` teaches VPC, subnets and security groups properly and shows what our architecture *would* look like on EC2, so the team can answer VPC questions at the oral even though we did not build one.
 
 ---
 
