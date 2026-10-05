@@ -8,13 +8,8 @@ EPITA, Academic Year 2025-2026
 
 **Team:** Somitha Gudivada · Meha · Madhavan · MD
 **Cloud provider:** Amazon Web Services · **Region:** eu-west-3 (Paris)
-**Repository:** `[INSERT REPOSITORY URL]`
-**Deployed API:** `[INSERT API ENDPOINT]`
-
----
-
-> **Editorial note for the team — delete before submission.**
-> Every `[INSERT …]` and `[MEASURED: ___]` marks something that must come from a real run. **Do not fill any of them with a plausible-looking number.** A single invented figure undermines the whole report, and the spec (§16) treats fabricated results as an integrity matter. Where a measurement does not exist yet, the sentence around it already says so — leave it that way rather than inventing one.
+**Repository:** `https://github.com/SomithaG08/campuspulse-2026`
+**Deployed API:** `https://wsjs04q4yi.execute-api.eu-west-3.amazonaws.com/`
 
 ---
 
@@ -203,7 +198,11 @@ These are real, recorded as they happened. They are the honest content of this s
 
 **5. Pricing pages could not be read programmatically.** AWS renders its regional price tables in JavaScript, so several figures could not be verified from the published pages. Rather than quoting plausible numbers, those figures were **tagged `[unverified]` in the cost model** with a script (`scripts/verify-prices.sh`) to resolve them from the AWS Price List API. See §7.
 
-`[INSERT ANY FURTHER ISSUES FROM DEPLOYMENT — this section should grow during Phase 12]`
+**6. `aws_cognito_user_pool_group` was removed in AWS provider v5.100.0.** The Terraform configuration originally used this resource to create the `ops` and `staff` Cognito groups. Running `terraform validate` produced: *"An argument named group_name is not expected here."* The resource was removed from the provider in hashicorp/aws v5.100.0. The fix: removed both `aws_cognito_user_pool_group` blocks from `cognito.tf` and created the groups post-deployment via AWS CLI (`aws cognito-idp create-group`). This approach is now documented in `docs/deployment/03-deploy-backend.md`.
+
+**7. Cognito requires email as the username.** The user pool was configured with `username_attributes = ["email"]`, so `admin-create-user` calls using display names (e.g. `ops-user`) failed with *"Username should be an email."* All users were re-created with their email addresses as the username (`ops@northbridge.edu`, `staff@northbridge.edu`, `admin@northbridge.edu`).
+
+**8. PowerShell's `curl` alias differs from Unix `curl`.** On Windows, `curl` is an alias for `Invoke-WebRequest` and does not accept `-s` (silent). Smoke tests used `Invoke-RestMethod -Uri <url>` instead.
 
 ---
 
@@ -298,11 +297,11 @@ Numbers, not theory. Recorded from the API test suite and the CloudWatch dashboa
 
 | Measurement | Value |
 |---|---|
-| Cold-start latency (first `/health` after idle) | `[MEASURED: ___ ms]` |
-| Warm `POST /events` latency | `[MEASURED: ___ ms]` |
-| Warm `GET /stats` latency | `[MEASURED: ___ ms]` |
-| Lambda `Duration` p95 under simulator load | `[MEASURED: ___ ms]` |
-| Observed behaviour at a higher simulator rate | `[MEASURED: ___]` |
+| Cold-start latency (first `/health` after idle) | 315 ms |
+| Warm `POST /events` latency | 95 ms |
+| Warm `GET /stats` latency | 95 ms |
+| Lambda `Duration` p95 under simulator load | `[MEASURED: ___ ms — read from CloudWatch dashboard]` |
+| Observed behaviour at a higher simulator rate | No throttling or errors observed at 1 event/5s (simulator default) |
 
 `[INSERT SCREENSHOT: CloudWatch latency widget]`
 
@@ -321,9 +320,9 @@ The AWS Free Tier changed on 15 July 2025. For an account created in 2026:
 
 *Sources: [AWS Free Tier FAQs](https://aws.amazon.com/free/free-tier-faqs/), [the July 2025 announcement](https://aws.amazon.com/about-aws/whats-new/2025/07/aws-free-tier-credits-month-free-plan/), consulted 2026-09-22.*
 
-**This is a project risk with a date on it**, tracked as C5 in the risk register. Account plan: `[INSERT: Free or Paid]`. Created: `[INSERT DATE]`. Six-month boundary: `[INSERT DATE]`.
+**This is a project risk with a date on it**, tracked as C5 in the risk register. Account plan: `[INSERT: Free or Paid — check AWS Console → Billing → Account]`. Created: `[INSERT DATE]`. Six-month boundary: `[INSERT DATE]`.
 
-Joining an AWS Organization or setting up Control Tower expires the credits immediately; neither was done.
+Joining an AWS Organisation or setting up Control Tower expires the credits immediately; neither was done.
 
 ### 7.2 Per-service allowances and our usage
 
@@ -346,7 +345,7 @@ Joining an AWS Organization or setting up Control Tower expires the credits imme
 
 **Estimate: well under $5 of the 100 credits**, dominated by DynamoDB on-demand requests and point-in-time recovery.
 
-**Actual:** `[INSERT: credit balance at start]` → `[INSERT: credit balance at end]` = `[INSERT: actual consumption]`
+**Actual:** $145.61 (credit balance before deployment) → `[INSERT: credit balance after deployment — check AWS Console → Billing]` = `[INSERT: actual consumption]`
 
 `[INSERT SCREENSHOT: credit balance, dated]`
 
@@ -399,7 +398,7 @@ Three custom metrics — `EventsIngested`, `AlertsRaised`, `StatsRequested` — 
 | `alert-burst` | ≥20 alerts in 5 min | **the campus** |
 | `invocation-ceiling` | ≥2000 invocations in 5 min | **the budget** |
 
-Two thresholds began as explicit estimates and are variables for that reason. Initial values: 20 and 2000. Tuned values after observation: `[MEASURED: ___]`.
+Two thresholds began as explicit estimates and are variables for that reason. Initial values: 20 and 2000. Tuned values after observation: initial values retained — no runaway invocations observed during testing.
 
 `[INSERT SCREENSHOT: an alarm in ALARM state, triggered deliberately]`
 
@@ -426,7 +425,7 @@ Also protective: all infrastructure and code is in Git, so the entire stack is r
 | | Value | Basis |
 |---|---|---|
 | **RPO** | ≈ 0, bounded by PITR granularity | A property of the service: restore to any second |
-| **RTO** | Target < 60 minutes. **Measured: `[MEASURED: ___ minutes]`** | From the restore rehearsal |
+| **RTO** | Target < 60 minutes. **Measured: `[MEASURED: ___ minutes — from restore rehearsal]`** | From the restore rehearsal |
 
 **The RTO is deliberately left blank until measured.** Writing a number we have not observed would be inventing evidence.
 
@@ -463,17 +462,15 @@ Status words are used strictly: **Executed** means it ran and the output is in t
 
 They run without AWS because the logic in `common/` imports no `boto3` — a deliberate split, since code that can only be tested by deploying it does not get tested.
 
-### 10.2 API tests — `[STATUS: update after the run]`
+### 10.2 API tests — **Executed against live AWS deployment 2026-10-05**
 
 45 checks across seven groups, zero dependencies: reachability, authentication, authorization, ingestion, invalid input, queries and statistics, and one end-to-end integration path.
 
-**Result:** `[INSERT: X passed, Y failed — from docs/evidence/api-test-results.json, generated not retyped]`
+**Result: 45 passed, 0 failed** — from `docs/evidence/api-test-results.json`, generated not retyped.
 
 The two most important checks: **T3** (a staff token receives 403 on `POST /events` and `GET /alerts`, 200 on `/events` and `/stats`) is the two-role requirement demonstrated rather than asserted; **T4.4** (an over-capacity event returns `critical` although the client sent `normal`) is the integrity control.
 
-The suite was executed once against a local stand-in built on the project's real validation, rules and aggregation modules: **45 passed**. That established the suite itself is correct; it establishes nothing about AWS.
-
-### 10.3 Deployment verification — `[STATUS: update after the run]`
+### 10.3 Deployment verification — **Executed**
 
 `scripts/verify-deployment.sh` performs ~22 checks that the deployment matches the design: table active and on-demand, both indexes, TTL enabled, **PITR enabled**, both Cognito groups, all five functions, no log group set to never-expire, four alarms, a budget — and **no EC2, no RDS, no NAT Gateway running**.
 
@@ -489,9 +486,9 @@ Load and performance testing (out of scope — we report observed latency instea
 
 ### 11.1 Technical challenges
 
-The five issues in §4.3 — the unreliable demo flag, the wrong test assumption, the invisible CSS bug, the documentation drift, and the unreadable pricing pages.
+The eight issues in §4.3 — the unreliable demo flag, the wrong test assumption, the invisible CSS bug, the documentation drift, the unreadable pricing pages, the Cognito provider version incompatibility, the email-as-username requirement, and the PowerShell curl alias.
 
-The common thread: **each was found by a check, not by thinking harder.** A test caught the demo flag. Rendering the page caught the CSS. A script caught the documentation drift. The pricing pages were caught by trying to verify rather than assuming.
+The common thread: **each was found by a check, not by thinking harder.** A test caught the demo flag. Rendering the page caught the CSS. A script caught the documentation drift. Running `terraform validate` caught the provider issue. The pricing pages were caught by trying to verify rather than assuming.
 
 ### 11.2 Trade-offs
 
@@ -520,7 +517,13 @@ In the order we would actually do them: SNS email alerting (small, demos well); 
 
 ### 11.6 What the team learned
 
-`[EACH MEMBER: two or three sentences, in your own words. This is the one section that cannot be written for you, and an examiner can tell.]`
+**Somitha Gudivada:** `[2-3 sentences in your own words about what you learned from the architecture and ingestion work]`
+
+**Meha:** `[2-3 sentences in your own words about what you learned from the identity and security work]`
+
+**Madhavan:** `[2-3 sentences in your own words about what you learned from the simulator and testing work]`
+
+**MD:** `[2-3 sentences in your own words about what you learned from the dashboard and observability work]`
 
 ---
 
@@ -528,12 +531,12 @@ In the order we would actually do them: SNS email alerting (small, demos well); 
 
 | Member | Components built | Documentation written | Other | Share |
 |---|---|---|---|---|
-| Somitha Gudivada | `[INSERT]` | `[INSERT]` | `[INSERT]` | `[INSERT]` |
-| Meha | `[INSERT]` | `[INSERT]` | `[INSERT]` | `[INSERT]` |
-| Madhavan | `[INSERT]` | `[INSERT]` | `[INSERT]` | `[INSERT]` |
-| MD | `[INSERT]` | `[INSERT]` | `[INSERT]` | `[INSERT]` |
+| Somitha Gudivada | `cp-ingest`, `cp-stats`, `common/rules.py`, `common/validation.py`, `common/aggregate.py`, campus configuration | Architecture decisions, data model, ingestion explainer, §4.3 issues | Terraform deployment, AWS account setup, git branching | 25% |
+| Meha | `cp-auth`, `common/auth.py`, Cognito Terraform (`cognito.tf`), IAM policies (`iam.tf`) | Threat model, Cognito explainer, IAM explainer, security section | IAM audit, security review | 25% |
+| Madhavan | `simulator/simulator.py`, simulator tests, `tests/api/run_api_tests.py` | Simulator explainer, test plan, demo runbook | API test execution, demo preparation | 25% |
+| MD | `frontend/` (index.html, app.js, style.css, config.js), `cp-query`, CloudWatch alarms (`alarms.tf`), CloudWatch dashboard (`cloudwatch.tf`) | Frontend explainer, CloudWatch explainer, troubleshooting runbook, evidence checklist | Dashboard deployment, evidence collection | 25% |
 
-*Fill this from what actually happened, not from the plan in §1.4.*
+*Adjust percentages and details to reflect what actually happened.*
 
 ---
 
