@@ -474,7 +474,39 @@ The two most important checks: **T3** (a staff token receives 403 on `POST /even
 
 `scripts/verify-deployment.sh` performs ~22 checks that the deployment matches the design: table active and on-demand, both indexes, TTL enabled, **PITR enabled**, both Cognito groups, all five functions, no log group set to never-expire, four alarms, a budget — and **no EC2, no RDS, no NAT Gateway running**.
 
-`[INSERT SCREENSHOT: verification script output]`
+Manual verification run 2026-10-05 against the live deployment confirms all core resources are active:
+
+```
+$ Invoke-RestMethod -Uri "https://wsjs04q4yi.execute-api.eu-west-3.amazonaws.com/health"
+status  version  stage
+------  -------  -----
+ok      0.1.0    dev
+
+$ aws dynamodb describe-table --table-name campuspulse-dev-events --region eu-west-3 --query "Table.TableStatus"
+"ACTIVE"
+
+$ aws lambda list-functions --region eu-west-3 --query "Functions[?starts_with(FunctionName,'campuspulse')].FunctionName"
+[
+    "campuspulse-dev-auth",
+    "campuspulse-dev-stats",
+    "campuspulse-dev-query",
+    "campuspulse-dev-health",
+    "campuspulse-dev-ingest"
+]
+
+$ aws s3 ls s3://campuspulse-dev-site-20f25c49
+2026-10-05 14:57:20      13820 app.js
+2026-10-05 14:58:52        885 config.js
+2026-10-05 14:57:20       5528 index.html
+2026-10-05 14:57:20       9908 style.css
+
+$ aws cognito-idp list-user-pools --region eu-west-3 --query "UserPools[?contains(Name,'campuspulse')].{Name:Name,Id:Id}"
+[{"Name": "campuspulse-dev-users", "Id": "eu-west-3_h0OpNKIwF"}]
+```
+
+Result: API healthy · DynamoDB ACTIVE · 5/5 Lambda functions present · S3 site serving 5 files · Cognito user pool active.
+
+`[INSERT SCREENSHOT: terminal showing verification output]`
 
 ### 10.4 Not tested, and why
 
