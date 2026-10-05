@@ -1,0 +1,7 @@
+# The Lambda Python runtime already includes boto3 and botocore, so the
+# deployment package contains only our own code - no vendored dependencies,
+# a small zip, and faster cold starts.
+#
+# This file exists for LOCAL development and testing.
+boto3>=1.34.0
+pytest>=8.0.0
