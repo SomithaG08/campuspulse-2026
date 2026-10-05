@@ -1,0 +1,12 @@
+# Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored
+# (*.tfvars) so your email address never reaches the public repository.
+
+notification_email = "your.name@epita.fr"
+
+# Optional - the defaults are fine:
+# project            = "campuspulse"
+# environment        = "dev"
+# region             = "eu-west-3"
+# budget_limit_usd   = 10
+# log_retention_days = 7
+# ttl_days           = 30
