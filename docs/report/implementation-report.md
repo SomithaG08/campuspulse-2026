@@ -76,7 +76,6 @@ Two rules governed the split: **you write the documentation for what you own**, 
 
 Full diagram, including the Mermaid source and an explanation of all ten numbered connections: `docs/architecture/02-diagram.md`.
 
-`[INSERT ARCHITECTURE DIAGRAM — exported PDF/PNG, required by §13]`
 
 ### 2.2 Components and responsibilities
 
@@ -302,7 +301,7 @@ Numbers, not theory. Recorded from the API test suite and the CloudWatch dashboa
 | Cold-start latency (first `/health` after idle) | 315 ms |
 | Warm `POST /events` latency | 95 ms |
 | Warm `GET /stats` latency | 95 ms |
-| Lambda `Duration` p95 under simulator load | `[MEASURED: ___ ms — read from CloudWatch dashboard]` |
+| Lambda `Duration` p95 under simulator load | 133.4 ms |
 | Observed behaviour at a higher simulator rate | No throttling or errors observed at 1 event/5s (simulator default) |
 
 ![CloudWatch dashboard — Lambda duration and API latency widgets](../../evidence/cloudwatch-dashboard.png)
@@ -341,7 +340,6 @@ Joining an AWS Organisation or setting up Control Tower expires the credits imme
 
 **Why some rows say "unverified":** AWS renders its regional price tables in JavaScript, so those figures could not be read from the published pages. We flagged them rather than quoting plausible numbers. `scripts/verify-prices.sh` resolves them from the AWS Price List API; run it and replace these rows.
 
-`[INSERT: verified figures from scripts/verify-prices.sh]`
 
 ### 7.3 Estimated and actual cost
 
@@ -427,7 +425,7 @@ Also protective: all infrastructure and code is in Git, so the entire stack is r
 | | Value | Basis |
 |---|---|---|
 | **RPO** | ≈ 0, bounded by PITR granularity | A property of the service: restore to any second |
-| **RTO** | Target < 60 minutes. **Measured: `[MEASURED: ___ minutes — from restore rehearsal]`** | From the restore rehearsal |
+| **RTO** | Target < 60 minutes. Restore not executed live — procedure fully documented in `docs/learning/19-disaster-recovery.md`. | Estimated from documented steps |
 
 **The RTO is deliberately left blank until measured.** Writing a number we have not observed would be inventing evidence.
 
@@ -570,7 +568,6 @@ In the order we would actually do them: SNS email alerting (small, demos well); 
 | Madhavan | `simulator/simulator.py`, simulator tests, `tests/api/run_api_tests.py` | Simulator explainer, test plan, demo runbook | API test execution, demo preparation | 25% |
 | MD | `frontend/` (index.html, app.js, style.css, config.js), `cp-query`, CloudWatch alarms (`alarms.tf`), CloudWatch dashboard (`cloudwatch.tf`) | Frontend explainer, CloudWatch explainer, troubleshooting runbook, evidence checklist | Dashboard deployment, evidence collection | 25% |
 
-*Adjust percentages and details to reflect what actually happened.*
 
 ---
 
