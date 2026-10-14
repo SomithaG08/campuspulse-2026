@@ -48,6 +48,14 @@ resource "aws_dynamodb_table" "events" {
     name = "gsi2sk"
     type = "S"
   }
+  attribute {
+    name = "gsi3pk"
+    type = "S"
+  }
+  attribute {
+    name = "gsi3sk"
+    type = "S"
+  }
 
   # "Recent events for one building on one day"
   global_secondary_index {
@@ -65,20 +73,37 @@ resource "aws_dynamodb_table" "events" {
     projection_type = "ALL"
   }
 
+  # "My service requests" - sparse, added Oct 2026 for the student page.
+  # Only service requests carry gsi3pk = USER#<cognito sub>, so a student's
+  # GET /requests is one Query on their own partition and nothing else.
+  # Adding a GSI to a live table is an online operation: no downtime, the
+  # index backfills in the background (older requests have no gsi3pk and
+  # simply do not appear in it).
+  global_secondary_index {
+    name            = "gsi3-by-requester"
+    hash_key        = "gsi3pk"
+    range_key       = "gsi3sk"
+    projection_type = "ALL"
+  }
+
   # Events delete themselves after ttl_days. Deletion by TTL is not billed.
   ttl {
     attribute_name = "expires_at"
     enabled        = true
   }
 
-  # Our entire disaster recovery story. Restores the table to any second in
-  # the retention window. Priced per GB of table size - our table is tiny.
+  # Layer 1 of the backup strategy: restores the table to any second in the
+  # last 35 days. Layer 2 is AWS Backup (backup.tf), which keeps snapshots in
+  # a separate vault that survives even if this table is deleted.
   point_in_time_recovery {
     enabled = true
   }
 
-  # Guards against a stray `terraform destroy` taking the data with it.
-  # Set to false deliberately when you are actually cleaning up.
+  # prevent_destroy is deliberately FALSE so `terraform destroy` can clean up
+  # at the end of the course. It therefore does NOT guard the data against a
+  # stray destroy - the AWS Backup vault (backup.tf) and the cleanup
+  # checklist are the safeguards.
+  # Set it to true if the table ever holds data worth protecting.
   lifecycle {
     prevent_destroy = false
   }

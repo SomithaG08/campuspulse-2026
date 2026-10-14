@@ -61,6 +61,9 @@ Room capacities and building baselines live in one shared config file (`backend/
 | `gsi1sk` | GSI1 sort key | same as `sk` |
 | `gsi2pk` | GSI2 partition key | `ALERT#<YYYY-MM-DD>` — **written only when `severity != normal`** |
 | `gsi2sk` | GSI2 sort key | same as `sk` |
+| `gsi3pk` | GSI3 partition key *(Oct 2026)* | `USER#<cognito sub>` — **written only for service requests** |
+| `gsi3sk` | GSI3 sort key | same as `sk` |
+| `requested_by` | attribute | the requester's email — returned to administrators only |
 | `expires_at` | TTL attribute | epoch seconds |
 | …plus every field from §1 | | |
 
@@ -79,6 +82,8 @@ Sort keys in DynamoDB are stored in order, so a key of `<timestamp>#<event_id>` 
 | 3 | Active alerts | GSI2 | `gsi2pk = ALERT#<today>`, reverse |
 | 4 | Everything today, for statistics | table | `pk = DAY#<today>` |
 | 5 | One specific event | table | `pk` + `sk` |
+| 6 | A student's own service requests *(Oct 2026)* | GSI3 (sparse) | `gsi3pk = USER#<sub from the verified token>`, reverse |
+| 7 | All service requests of a day, admin view *(Oct 2026)* | table | `pk = DAY#<date>`, filter `event_type = service_request`, paged |
 
 **There is no `Scan` anywhere in this design.** If a feature ever seems to need one, the key design is wrong — raise it rather than adding a scan.
 
@@ -94,10 +99,10 @@ Users live in **Cognito**, not DynamoDB. No users table.
 
 | Group | Members | May call |
 |---|---|---|
-| `ops` | Campus operations staff | everything: `/events`, `/stats`, `/alerts`, `POST /events` |
-| `staff` | Teaching/admin staff | `/stats`, `/events` (read), `POST /requests` — **not** `/alerts`, **not** `POST /events` |
+| `admin` | Campus administrators (and the simulator's account) | everything: `POST /events`, `GET /events`, `/alerts`, `/stats`, all requests |
+| `student` | Students | `/stats`, `POST /requests`, `GET /requests` (**own only**) — **not** `/events`, **not** `/alerts` |
 
-Demo users to create in Phase 7: one `ops`, one `staff`, and `device@campuspulse.local` in `ops` for the simulator.
+*Renamed from `ops`/`staff` after the project review (October 2026), which asked for one administrator page and one student page.* Demo users: `admin@northbridge.edu` (admin), `student@northbridge.edu` (student), and `device@campuspulse.local` in `admin` for the simulator.
 
 ## 5. Retention — TTL
 

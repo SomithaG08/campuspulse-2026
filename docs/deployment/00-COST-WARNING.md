@@ -12,7 +12,7 @@ Phase 4 is the first phase that creates real AWS resources. Real resources can s
 | Cognito user pool | No | $0 | Free tier 10,000 MAU on Essentials. We will have ~6 users → **$0** |
 | S3 bucket | No | Per GB stored + per request | A few hundred KB of static files → effectively $0 |
 | IAM roles and policies (4 + 1) | No | **$0** | IAM is free |
-| CloudWatch log groups (4) | No | Per GB ingested and stored | Retention set to 7 days; free tier is 5 GB → **$0** |
+| CloudWatch log groups (5 Lambda + 1 API access log) | No | Per GB ingested and stored | Retention set to 7 days; free tier is 5 GB → **$0** |
 
 **Nothing in this phase bills by the hour.** That is the whole point of the architecture, and it is why you can apply this and then walk away for a week without checking.
 

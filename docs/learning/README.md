@@ -8,7 +8,7 @@ Written for teammates starting from zero cloud knowledge. Every document defines
 |---|---|---|---|
 | 00 | `00-start-here.md` | everyone | What we are building, cloud computing, AWS, Big Data, the analogy and where it breaks |
 | 05 | `05-api-explained.md` | everyone | HTTP, JSON, status codes, 401 vs 403, our seven endpoints |
-| 06 | `06-lambda-explained.md` | Somitha | Handlers, cold starts, the four functions, configuration, errors |
+| 06 | `06-lambda-explained.md` | Somitha | Handlers, cold starts, the five functions, configuration, errors |
 | 07 | `07-dynamodb-explained.md` | Somitha, MD | Key design, Query vs Scan, the sparse index, TTL, our ceiling |
 | 08 | `08-cognito-authentication.md` | Meha | Authentication vs authorization, JWTs, the three checks, pool settings |
 | 09 | `09-cloudwatch-monitoring.md` | MD | Logs vs metrics vs alarms, EMF, p95, the free-tier budget |

@@ -30,12 +30,16 @@ The AWS Free Tier changed on 15 July 2025, and the new model is **not** the 12-m
 | Service | Free allowance | Confidence | Price beyond it | Our expected usage |
 |---|---|---|---|---|
 | **Lambda** | 1,000,000 requests + 400,000 GB-seconds **per month**, not time-limited. Does **not** apply to Provisioned Concurrency | **[verified]** [pricing](https://aws.amazon.com/lambda/pricing/) | $0.20 per 1M requests; ~$0.0000166667 per GB-s (x86, N. Virginia) | « 100k requests total |
-| **API Gateway HTTP API** | 1,000,000 calls/month **for 12 months** (new customers) | **[verified]** [pricing](https://aws.amazon.com/api-gateway/pricing/) | **$1.00 per 1M** (HTTP API) — REST would be $3.50 | « 100k calls total |
+| **API Gateway HTTP API** | 1,000,000 calls/month **for 12 months** — a legacy 12-month offer; **probably not applicable** to an account on the post-July-2025 free plan, which is funded by credits instead | price **[verified]** [pricing](https://aws.amazon.com/api-gateway/pricing/); applicability **[unverified]** | **$1.00 per 1M** (HTTP API) — REST would be $3.50 | « 100k calls total |
 | **DynamoDB** | 25 GB storage, 25 WCU, 25 RCU, 2.5M stream reads — per region per month, **stated for provisioned capacity + Standard class** | **[verified]** [pricing](https://aws.amazon.com/dynamodb/pricing/) | on-demand ≈ $0.625/1M writes, $0.125/1M reads (N. Virginia) | **[unverified]** — 100k writes ≈ **$0.06**; storage « 1 GB |
 | **Cognito** | **10,000 MAU/month** for **Lite or Essentials** pools; not limited to 12 months. **No free tier on Plus.** No free tier for M2M token requests | **[verified]** [pricing](https://aws.amazon.com/cognito/pricing/) | $0.015/MAU (Essentials) | ~6 users |
-| **CloudWatch** | 5 GB logs (ingest + storage + Insights scanning combined), 10 custom metrics, 10 alarm metrics, 3 dashboards, 1M API requests | **[verified]** [pricing](https://aws.amazon.com/cloudwatch/pricing/) | metrics ~$0.30/metric/month at the top tier **[unverified]**; logs ~$0.50/GB **[unverified]** | 2 metrics, 3 alarms, 1 dashboard, « 1 GB logs |
+| **CloudWatch** | 5 GB logs (ingest + storage + Insights scanning combined), 10 custom metrics, 10 alarm metrics, 3 dashboards, 1M API requests | **[verified]** [pricing](https://aws.amazon.com/cloudwatch/pricing/) | metrics ~$0.30/metric/month at the top tier **[unverified]**; logs ~$0.50/GB **[unverified]** | 9 metric series, 7 alarms, 1 dashboard, « 1 GB logs |
 | **S3** | The familiar 5 GB / 20,000 GET / 2,000 PUT figures **could not be read from the pricing page** and are therefore not asserted here | **[unverified]** | not read | < 1 MB of static files |
-| **IAM** | Free | **[verified]** — no charge for IAM | — | 4 roles |
+| **IAM** | Free | **[verified]** — no charge for IAM | — | 4 roles (api, auth, backup, flow-logs) |
+| **VPC, subnets, route tables, security groups, DynamoDB gateway endpoint** *(Oct 2026)* | Free — gateway endpoints have no hourly or data charge | **[verified]** [VPC pricing](https://aws.amazon.com/vpc/pricing/) | — | 1 VPC, 2 subnets, 1 endpoint |
+| **VPC Flow Logs** *(Oct 2026)* | Billed as CloudWatch Logs ingestion, inside the 5 GB free allowance | **[verified]** | — | a few MB/month |
+| **AWS Backup (DynamoDB)** *(Oct 2026)* | No free tier; per GB-month of backup storage | **[unverified]** ≈ $0.10/GB-month | — | table < 10 MB → < $0.01/month |
+| **SNS email** *(Oct 2026)* | 1,000 email notifications/month | **[verified]** [pricing](https://aws.amazon.com/sns/pricing/) | — | tens of alarm emails |
 | **DynamoDB PITR** | Priced per GB of table size; rate not read | **[unverified]** | — | table « 1 GB, so cents |
 | **Data transfer out** | The DynamoDB page notes 100 GB/month free data transfer out to the internet, aggregated across services | **[verified]** [pricing](https://aws.amazon.com/dynamodb/pricing/) | — | a few MB |
 
@@ -51,7 +55,8 @@ Ranked by how much damage per hour of inattention:
 
 | Hazard | Rough cost if left running | Our defence |
 |---|---|---|
-| **NAT Gateway** | ~$0.045/hour + per-GB ≈ **$32+/month** | We have no VPC. Architecturally impossible for us to create one by accident |
+| **NAT Gateway** | ~$0.045/hour + per-GB ≈ **$32+/month** | Our VPC (Oct 2026) has **no** NAT Gateway and needs none: the data function only talks to DynamoDB, through a free gateway endpoint. `verify-deployment.sh` checks none exists |
+| **Interface VPC endpoints** | ~$0.01/hour per AZ ≈ **$8/month each per AZ** | Deliberately avoided: login runs outside the VPC (no Cognito endpoint) and alerts go alarm → SNS (no SNS endpoint) |
 | **RDS instance** | Hourly, 24/7 | Not used; on the forbidden list |
 | **EC2 instance left on** | Hourly, 24/7 | Not used; on the forbidden list |
 | **Load balancer** | Hourly, 24/7 | Not used; API Gateway replaces it |
@@ -76,7 +81,7 @@ Ranked by how much damage per hour of inattention:
 
 ## 5. Cleanup, when the project is over
 
-In dependency order: empty and delete the S3 bucket → delete the API → delete the four Lambdas and their log groups → delete the DynamoDB table (**export first if the data is needed as evidence**) → delete the Cognito user pool → delete the IAM roles → delete the alarms, dashboard and budget. Then confirm the credit balance stops moving for 24 hours.
+In dependency order: empty and delete the S3 bucket → delete the API → delete the five Lambdas and their log groups → delete the DynamoDB table (**export first if the data is needed as evidence**) → delete the Cognito user pool → delete the IAM roles → delete the alarms, dashboard and budget. Then confirm the credit balance stops moving for 24 hours.
 
 A `terraform destroy` does most of this in one command, which is one more argument for Infrastructure as Code.
 

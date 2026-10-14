@@ -1,13 +1,20 @@
 # ---------------------------------------------------------------------------
-# One role per Lambda. This file is where "least privilege" stops being a word
-# in a report and becomes something an examiner can read.
+# One role per Lambda - two roles since the October 2026 consolidation.
 #
-# The function exposed to the internet (cp-ingest) can WRITE and cannot READ.
-# The functions that read cannot write. If an attacker found a bug in ingest,
-# they could add junk events - they could not read a single student request.
+#   api role   dynamodb:PutItem + dynamodb:Query on ONE table and its indexes,
+#              plus the EC2 network-interface actions Lambda needs to run in
+#              the VPC. No Scan, no Delete, no Update, no other table.
+#   auth role  cognito-idp:InitiateAuth on ONE user pool. No data at all.
 #
-# The roles are created now even though the functions arrive in Phase 5: a
-# role is an identity, it does not need the function to exist.
+# WHAT WE GAVE UP, STATED PLAINLY
+# The old design had a write-only ingest role and read-only query/stats roles.
+# Merging them means the API role can both write and read. We accept that
+# because three other controls now bound the same risk:
+#   1. the function runs in private subnets with no internet route, so data
+#      it can read has nowhere to go except back through API Gateway;
+#   2. the DynamoDB gateway endpoint policy (vpc.tf) only allows our table;
+#   3. every route still checks the caller's Cognito group before acting.
+# Recorded as AD-11 in docs/architecture/01-architecture-decisions.md.
 # ---------------------------------------------------------------------------
 
 data "aws_iam_policy_document" "lambda_assume" {
@@ -38,37 +45,21 @@ resource "aws_iam_policy" "logs" {
   policy = data.aws_iam_policy_document.logs.json
 }
 
-# --- cp-ingest: write only -------------------------------------------------
-resource "aws_iam_role" "ingest" {
-  name               = "${local.name}-ingest-role"
+# --- api: the data function ------------------------------------------------
+resource "aws_iam_role" "api" {
+  name               = "${local.name}-api-role"
   assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
 }
 
-data "aws_iam_policy_document" "ingest" {
+data "aws_iam_policy_document" "api_data" {
   statement {
+    sid       = "WriteEvents"
     effect    = "Allow"
     actions   = ["dynamodb:PutItem"]
     resources = [aws_dynamodb_table.events.arn]
   }
-}
-
-resource "aws_iam_role_policy" "ingest" {
-  name   = "${local.name}-ingest-policy"
-  role   = aws_iam_role.ingest.id
-  policy = data.aws_iam_policy_document.ingest.json
-}
-
-resource "aws_iam_role_policy_attachment" "ingest_logs" {
-  role       = aws_iam_role.ingest.name
-  policy_arn = aws_iam_policy.logs.arn
-}
-
-# --- cp-query and cp-stats: read only --------------------------------------
-# Both need exactly the same permission, so they share a policy document but
-# keep separate roles - separate roles mean we can tighten one later without
-# touching the other.
-data "aws_iam_policy_document" "read_events" {
   statement {
+    sid     = "ReadEventsByKeyOnly"
     effect  = "Allow"
     actions = ["dynamodb:Query"] # deliberately NOT dynamodb:Scan
     resources = [
@@ -78,39 +69,46 @@ data "aws_iam_policy_document" "read_events" {
   }
 }
 
-resource "aws_iam_role" "query" {
-  name               = "${local.name}-query-role"
-  assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
+resource "aws_iam_role_policy" "api_data" {
+  name   = "${local.name}-api-data"
+  role   = aws_iam_role.api.id
+  policy = data.aws_iam_policy_document.api_data.json
 }
 
-resource "aws_iam_role_policy" "query" {
-  name   = "${local.name}-query-policy"
-  role   = aws_iam_role.query.id
-  policy = data.aws_iam_policy_document.read_events.json
+# Running in a VPC means Lambda creates elastic network interfaces (ENIs) in
+# our private subnets. These are exactly the EC2 actions of the AWS managed
+# policy AWSLambdaVPCAccessExecutionRole, written out so the role grants
+# nothing we have not read. EC2 does not support resource-level restriction
+# for these calls, so the resource is "*" - the same scope AWS itself uses.
+# They allow managing network interfaces, not reading any data.
+data "aws_iam_policy_document" "api_vpc" {
+  statement {
+    sid    = "LambdaVpcNetworkInterfaces"
+    effect = "Allow"
+    actions = [
+      "ec2:CreateNetworkInterface",
+      "ec2:DescribeNetworkInterfaces",
+      "ec2:DescribeSubnets",
+      "ec2:DeleteNetworkInterface",
+      "ec2:AssignPrivateIpAddresses",
+      "ec2:UnassignPrivateIpAddresses",
+    ]
+    resources = ["*"]
+  }
 }
 
-resource "aws_iam_role_policy_attachment" "query_logs" {
-  role       = aws_iam_role.query.name
+resource "aws_iam_role_policy" "api_vpc" {
+  name   = "${local.name}-api-vpc"
+  role   = aws_iam_role.api.id
+  policy = data.aws_iam_policy_document.api_vpc.json
+}
+
+resource "aws_iam_role_policy_attachment" "api_logs" {
+  role       = aws_iam_role.api.name
   policy_arn = aws_iam_policy.logs.arn
 }
 
-resource "aws_iam_role" "stats" {
-  name               = "${local.name}-stats-role"
-  assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
-}
-
-resource "aws_iam_role_policy" "stats" {
-  name   = "${local.name}-stats-policy"
-  role   = aws_iam_role.stats.id
-  policy = data.aws_iam_policy_document.read_events.json
-}
-
-resource "aws_iam_role_policy_attachment" "stats_logs" {
-  role       = aws_iam_role.stats.name
-  policy_arn = aws_iam_policy.logs.arn
-}
-
-# --- cp-auth: talk to Cognito, touch no data -------------------------------
+# --- auth: talk to Cognito, touch no data -----------------------------------
 resource "aws_iam_role" "auth" {
   name               = "${local.name}-auth-role"
   assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
@@ -132,19 +130,5 @@ resource "aws_iam_role_policy" "auth" {
 
 resource "aws_iam_role_policy_attachment" "auth_logs" {
   role       = aws_iam_role.auth.name
-  policy_arn = aws_iam_policy.logs.arn
-}
-
-# --- cp-health: logs only --------------------------------------------------
-# The health check touches nothing, so its role grants nothing beyond writing
-# its own logs. A function that needs no permissions should HAVE no
-# permissions - it is the cheapest least-privilege win in the project.
-resource "aws_iam_role" "health" {
-  name               = "${local.name}-health-role"
-  assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
-}
-
-resource "aws_iam_role_policy_attachment" "health_logs" {
-  role       = aws_iam_role.health.name
   policy_arn = aws_iam_policy.logs.arn
 }

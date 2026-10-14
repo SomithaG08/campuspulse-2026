@@ -22,11 +22,11 @@ Cost figures are summarised here and sourced in full in `07-cost-model.md`.
 
 **6. What comes out?** The Lambda's response as HTTP, or a 401 from the authorizer, a 429 from throttling, or a 5xx if the function failed.
 
-**7. What does it communicate with?** Inbound: simulator, browser. Outbound: the four Lambdas. Sideways: Cognito for public keys, CloudWatch for logs.
+**7. What does it communicate with?** Inbound: simulator, browser. Outbound: the five Lambdas. Sideways: Cognito for public keys, CloudWatch for logs.
 
 **8. Why not the alternative?** REST API v1 costs $3.50 per million against HTTP API's $1.00, needs more configuration for CORS and Cognito, and its extra features (API keys, WAF, caching) are ones we do not use. An Nginx/Node API on EC2 would bill by the hour and make us responsible for TLS and patching.
 
-**9. Cost.** Free tier 1M calls/month for 12 months; then $1.00 per million. Our whole project is far below 1M calls. *(Confirmed on the pricing page.)*
+**9. Cost.** $1.00 per million calls (HTTP API). The "1M calls/month for 12 months" allowance is a legacy 12-month free-tier offer; an account on the post-July-2025 free plan pays from its credits instead. Our whole project is far below 1M calls, so this is cents either way.
 
 **10. If we removed it?** Lambda has no public URL in our design, so the system would have no way in at all.
 

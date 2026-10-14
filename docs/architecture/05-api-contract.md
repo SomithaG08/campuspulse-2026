@@ -1,6 +1,8 @@
 # API Contract — CampusPulse 2026
 
-Base URL (after deployment): `https://<api-id>.execute-api.eu-west-3.amazonaws.com` — **not deployed yet**.
+*Revised 12 October 2026 after the project review: roles are now `admin` and `student` (were `ops` and `staff`); new route `GET /requests`; every route except `POST /login` is served by the single `api` function.*
+
+Base URL: `https://<api-id>.execute-api.eu-west-3.amazonaws.com` (the live value is printed by `terraform output api_endpoint`). Deployed 2026-10-05.
 
 Every endpoint the spec's Appendix B requires is here. The two extras are marked.
 
@@ -36,12 +38,12 @@ Authenticates a user. **No token required.**
 
 **Request**
 ```json
-{ "username": "ops@northbridge.edu", "password": "••••••••" }
+{ "username": "admin@northbridge.edu", "password": "••••••••" }
 ```
 
 **200**
 ```json
-{ "id_token": "eyJraWQi...", "expires_in": 3600, "role": "ops", "username": "ops@northbridge.edu" }
+{ "id_token": "eyJraWQi...", "expires_in": 3600, "role": "admin", "username": "admin@northbridge.edu" }
 ```
 
 | Error | When |
@@ -49,13 +51,13 @@ Authenticates a user. **No token required.**
 | 400 | Missing username or password |
 | 401 | Wrong credentials, or the user must change their password on first login |
 
-**How it works:** `cp-auth` calls Cognito `InitiateAuth`. Our code never sees a stored password and never writes one anywhere. Failed attempts are logged **with the username but never the password**.
+**How it works:** The `auth` function calls Cognito `InitiateAuth`. Our code never sees a stored password and never writes one anywhere. Failed attempts are logged **with the username but never the password**.
 
 ---
 
 ## `POST /events`
 
-Submits one campus event. **Requires `ops`.** (The simulator's device user is in `ops`.)
+Submits one campus event. **Requires `admin`.** (The simulator signs in with an `admin` account.)
 
 **Request:** the event object from `04-data-model.md` §1. `severity` may be sent but is ignored.
 
@@ -70,14 +72,14 @@ The response tells the caller what the server decided — the simulator prints t
 |---|---|
 | 400 | Missing field, unknown `event_type`, wrong `unit`, non-numeric `value`, out-of-window `timestamp`, body larger than 4 KB |
 | 401 | No/expired token |
-| 403 | Token belongs to `staff` |
+| 403 | Token belongs to `student` |
 | 429 | Above the stage throttle |
 
 ---
 
 ## `GET /events`
 
-Recent events, newest first. **Requires `ops` or `staff`.**
+Recent events, newest first. **Requires `admin`.** (Students see the campus through `/stats`, never raw sensor events.)
 
 | Query param | Default | Max | Meaning |
 |---|---|---|---|
@@ -98,7 +100,7 @@ Recent events, newest first. **Requires `ops` or `staff`.**
 
 ## `GET /alerts`
 
-Only events with `severity != normal`, newest first. **Requires `ops`.** Reads the sparse GSI2, so it never touches normal events.
+Only events with `severity != normal`, newest first. **Requires `admin`.** Reads the sparse GSI2, so it never touches normal events.
 
 | Query param | Default | Meaning |
 |---|---|---|
@@ -121,7 +123,7 @@ Only events with `severity != normal`, newest first. **Requires `ops`.** Reads t
 
 ## `GET /stats`
 
-Aggregated campus state. **Requires `ops` or `staff`.**
+Aggregated campus state. **Requires `admin` or `student`.** The student page uses it for "find a room" and "building comfort"; the response also carries `layout` (`{building: [rooms]}`) so the student's room picker is built from the same configuration the validator uses.
 
 | Query param | Default | Meaning |
 |---|---|---|
@@ -151,16 +153,42 @@ Every one of the operational questions in the spec (§2) is answerable from this
 
 ## `POST /requests` *(extra, not in Appendix B)*
 
-A student service request. **Requires `staff` or `ops`.** Exists so the `staff` role can *do* something rather than only read — the spec asks for two roles with different permissions, and a role that can only read is a thin demonstration.
+A service request — the main action on the **student page**. **Requires `student` or `admin`.**
 
 **Request**
 ```json
 { "building": "Library-A", "room": "A203", "message": "Projector not working", "priority": 3 }
 ```
 
-Stored as an event with `event_type: "service_request"`, `value: priority`, `unit: "priority"`, `source: "staff-portal"`. Priority 3 becomes `critical` and therefore appears in `/alerts` — so a student request and a broken sensor flow through exactly the same pipeline. One path, two stories.
+Stored as an event with `event_type: "service_request"`, `value: priority`, `unit: "priority"`, `source: "student-portal"`, `requested_by: <email>`, and `gsi3pk: USER#<cognito sub>`. Priority 3 becomes `critical`, appears in `/alerts`, and **emails the team** through the `urgent-request` alarm.
 
-**201** `{ "event_id": "evt-...", "severity": "critical", "alert": true }`
+**201** `{ "event_id": "req-...", "severity": "critical", "alert": true }`
+
+---
+
+## `GET /requests` *(added October 2026)*
+
+**Requires `student` or `admin`. The answer depends on the role:**
+
+| Caller | Returns | How |
+|---|---|---|
+| `student` | **Only their own** requests, any day, newest first. No `requested_by` field | Query on GSI3 with the key `USER#<sub>`, where `sub` comes from the **verified token**, never from a parameter — there is no way to ask for someone else's |
+| `admin` | Every request of one day (`?date=YYYY-MM-DD`, default today), with `requested_by` | Query on the day partition filtered on `event_type`, paged (DynamoDB's `Limit` applies before the filter) |
+
+Query parameters: `limit` (1-200, default 50), `next_token`, and for admins `date`.
+
+**200**
+```json
+{
+  "scope": "your requests",
+  "count": 1,
+  "urgent_count": 1,
+  "requests": [ { "event_id": "req-1791833573036", "building": "Library-A", "room": "A203",
+                  "message": "Projector not working", "priority": 3, "priority_label": "urgent",
+                  "severity": "critical", "timestamp": "2026-10-12T19:32:53Z" } ],
+  "next_token": null
+}
+```
 
 ---
 
@@ -172,22 +200,24 @@ No authentication. Returns `{ "status": "ok", "version": "..." }`. Used by the d
 
 ## Permission matrix
 
-| Endpoint | none | `staff` | `ops` |
-|---|---|---|---|
-| `POST /login` | ✅ | ✅ | ✅ |
-| `GET /health` | ✅ | ✅ | ✅ |
-| `POST /events` | 401 | **403** | ✅ |
-| `GET /events` | 401 | ✅ | ✅ |
-| `GET /stats` | 401 | ✅ | ✅ |
-| `GET /alerts` | 401 | **403** | ✅ |
-| `POST /requests` | 401 | ✅ | ✅ |
+| Endpoint | none | `student` | `admin` | Page |
+|---|---|---|---|---|
+| `POST /login` | ✅ | ✅ | ✅ | sign-in |
+| `GET /health` | ✅ | ✅ | ✅ | — |
+| `POST /events` | 401 | **403** | ✅ | (simulator) |
+| `GET /events` | 401 | **403** | ✅ | admin |
+| `GET /alerts` | 401 | **403** | ✅ | admin |
+| `GET /stats` | 401 | ✅ | ✅ | admin, student |
+| `POST /requests` | 401 | ✅ | ✅ | student |
+| `GET /requests` | 401 | ✅ own only | ✅ all, with requester | admin, student |
 
-The two **403** cells are the authorization demo. Have that curl command ready in the demo script.
+The **403** cells are the authorization demo. Have that curl command ready in the demo script.
 
 ## Where each check happens
 
 1. **API Gateway JWT authorizer** — is the token real, unexpired, and issued by our pool? If not, 401, and our code never runs.
-2. **Lambda** — does `cognito:groups` contain a group allowed on this route? If not, 403.
+2. **The route's role check** (`common/auth.py`, called by each route module) — does `cognito:groups` contain a group allowed on this route? If not, 403.
 3. **IAM** — may this function touch this table at all? Enforced by AWS regardless of what our code tries.
+4. **The network** — the `api` function's only route out of its private subnets is the DynamoDB endpoint, whose policy names our table.
 
-Three layers, each independently sufficient to stop a whole class of attack. Every team member should be able to recite them.
+Four layers, each independently sufficient to stop a whole class of attack.

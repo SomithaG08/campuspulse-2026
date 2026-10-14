@@ -73,7 +73,7 @@ Exits 0 or 1, and writes `docs/evidence/api-test-results.json` — **that file i
 
 ### Has this suite ever run?
 
-**Against AWS: no.** Nothing is deployed.
+**Against AWS: yes** — executed against the live deployment on 2026-10-05T13:04Z: **45 passed, 0 failed** (`docs/evidence/api-test-results.json`).
 
 **Against a local stand-in: yes** — 45 passed, 0 failed. A throwaway HTTP server built on the project's *real* validation, rules, key-building and aggregation modules was run on a laptop, and the suite was executed against it. That server was scratch, kept outside the repository, and is not part of the system.
 

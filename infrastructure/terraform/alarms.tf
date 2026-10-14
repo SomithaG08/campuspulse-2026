@@ -1,52 +1,102 @@
 # ---------------------------------------------------------------------------
-# Alarms and the operations dashboard.
+# Alarms, email alerts to the team, and the operations dashboard.
 #
-# FREE-TIER BUDGET (verified on the CloudWatch pricing page):
-#   10 alarm metrics free  -> we use 4
+# PROFESSOR'S REVIEW (October 2026): "alerts should be redirected to the team
+# with school mail". Every alarm below now notifies one SNS topic, and that
+# topic emails every address in var.alert_emails - the team's @epita.fr
+# addresses (set in terraform.tfvars, which is gitignored). A Microsoft Teams
+# channel can be added to the same list: every Teams channel has an email
+# address (channel menu -> "Get email address"), and mail sent to it is posted
+# in the channel.
+#
+# The two alarms that matter most to the campus are new:
+#   critical-alert   any CRITICAL campus event (room >120% full, temperature
+#                    outside the safe range, equipment failed, ...)
+#   urgent-request   any URGENT student service request (priority 3)
+# Both fire within about a minute and email the team immediately.
+#
+# HOW THE MAIL FLOWS, AND WHY IT COSTS NOTHING
+#   api Lambda prints an EMF log line -> CloudWatch metric -> alarm -> SNS ->
+#   email. The Lambda never calls SNS itself: it sits in private subnets with
+#   no internet route, and an SNS interface endpoint would cost ~$8/month per
+#   AZ. Alarms are free up to 10, SNS email is free up to 1,000 a month.
+#
+# An alarm emails on a STATE CHANGE (OK -> ALARM), not once per event. A room
+# that stays overloaded produces one email, not one every ten seconds, and an
+# "OK" email when it clears. That is what an on-call inbox needs.
+#
+# FREE-TIER BUDGET (CloudWatch pricing page):
+#   10 alarm metrics free  -> we use 7
 #   3 custom dashboards    -> we use 1
-#   10 custom metrics      -> we use 3 (EventsIngested, AlertsRaised, StatsRequested)
+#   10 custom metrics      -> we use 9 (EventsIngested x3 severities + total,
+#                             AlertsRaised x2 severities + total,
+#                             UrgentRequests, StatsRequested)
 #
-# ON THE THRESHOLDS, HONESTLY
-# ---------------------------
-# Two of the four are initial guesses. A threshold invented before a system has
-# ever run is exactly that, and pretending otherwise would be the kind of
-# unfounded claim this project avoids elsewhere. They are variables so they can
-# be corrected from a real run, and the report records both the guess and the
-# tuned value - which is a better story than a number that was always "right".
-#
-# The error alarm is NOT a guess: at our volume any Lambda error is worth a look.
+# ON THE THRESHOLDS, HONESTLY: alert-burst and invocation-ceiling are initial
+# guesses, kept as variables so they can be tuned from a real run. The error,
+# critical-alert and urgent-request thresholds are not guesses: at our volume,
+# one of any of them is worth a human looking.
 # ---------------------------------------------------------------------------
 
-# --- optional email ---------------------------------------------------------
-# Alarms work without this: they change state and show red in the console,
-# which is enough to demonstrate. Set alarm_email to also get an email, which
-# is the optional feature O2 from the scope document.
-resource "aws_sns_topic" "alarms" {
-  count = var.alarm_email == "" ? 0 : 1
-  name  = "${local.name}-alarms"
+# --- the team's alert inbox ---------------------------------------------------
+resource "aws_sns_topic" "alerts" {
+  name = "${local.name}-alerts"
+  # Deliberately NOT encrypted with the AWS-managed key alias/aws/sns:
+  # CloudWatch alarms cannot publish to a topic using that key (its key
+  # policy cannot be edited to admit CloudWatch), so the alarm would fire and
+  # the email would silently never arrive. Encryption would need a
+  # customer-managed KMS key at $1/month; the messages hold an alarm name and
+  # a room number, not personal data, so we accept that. Noted in the threat
+  # model.
 }
 
-resource "aws_sns_topic_subscription" "alarms_email" {
-  count     = var.alarm_email == "" ? 0 : 1
-  topic_arn = aws_sns_topic.alarms[0].arn
+# Only CloudWatch alarms of THIS project may publish to the topic.
+data "aws_iam_policy_document" "alerts_topic" {
+  statement {
+    sid     = "AllowCloudWatchAlarms"
+    effect  = "Allow"
+    actions = ["sns:Publish"]
+    principals {
+      type        = "Service"
+      identifiers = ["cloudwatch.amazonaws.com"]
+    }
+    resources = [aws_sns_topic.alerts.arn]
+    condition {
+      test     = "ArnLike"
+      variable = "aws:SourceArn"
+      values   = ["arn:aws:cloudwatch:${var.region}:${data.aws_caller_identity.current.account_id}:alarm:${local.name}-*"]
+    }
+  }
+}
+
+resource "aws_sns_topic_policy" "alerts" {
+  arn    = aws_sns_topic.alerts.arn
+  policy = data.aws_iam_policy_document.alerts_topic.json
+}
+
+resource "aws_sns_topic_subscription" "team_email" {
+  for_each  = toset(var.alert_emails)
+  topic_arn = aws_sns_topic.alerts.arn
   protocol  = "email"
-  endpoint  = var.alarm_email
-  # AWS sends a confirmation email. Until someone clicks it, nothing arrives -
-  # a step that is easy to forget and then blame on the alarm.
+  endpoint  = each.value
+  # AWS sends each address a confirmation email ("AWS Notification -
+  # Subscription Confirmation"). Until it is clicked, nothing arrives. With
+  # school mail, check the spam/quarantine folder - university filters often
+  # hold the first message from no-reply@sns.amazonaws.com.
 }
 
 locals {
-  alarm_actions = var.alarm_email == "" ? [] : [aws_sns_topic.alarms[0].arn]
+  alarm_actions = [aws_sns_topic.alerts.arn]
 }
 
 # --- 1. the system is broken -----------------------------------------------
-resource "aws_cloudwatch_metric_alarm" "ingest_errors" {
-  alarm_name        = "${local.name}-ingest-errors"
-  alarm_description = "cp-ingest raised at least one error in 5 minutes. Check its log group, filter level=ERROR."
+resource "aws_cloudwatch_metric_alarm" "api_errors" {
+  alarm_name        = "${local.name}-api-errors"
+  alarm_description = "The api Lambda raised at least one error in 5 minutes. Check /aws/lambda/${local.name}-api, filter level=ERROR."
 
   namespace   = "AWS/Lambda"
   metric_name = "Errors"
-  dimensions  = { FunctionName = aws_lambda_function.ingest.function_name }
+  dimensions  = { FunctionName = aws_lambda_function.api.function_name }
 
   statistic           = "Sum"
   period              = 300
@@ -90,7 +140,7 @@ resource "aws_cloudwatch_metric_alarm" "alert_burst" {
   alarm_description = "Unusually many alerts campus-wide in 5 minutes. Either something systemic, or a simulator left on --force-alert."
 
   namespace   = var.metric_namespace
-  metric_name = "AlertsRaised"
+  metric_name = "AlertsRaised" # the dimensionless campus-wide total (log.metric aggregate=True)
 
   statistic           = "Sum"
   period              = 300
@@ -110,7 +160,7 @@ resource "aws_cloudwatch_metric_alarm" "invocation_ceiling" {
 
   namespace   = "AWS/Lambda"
   metric_name = "Invocations"
-  dimensions  = { FunctionName = aws_lambda_function.ingest.function_name }
+  dimensions  = { FunctionName = aws_lambda_function.api.function_name }
 
   statistic           = "Sum"
   period              = 300
@@ -119,6 +169,61 @@ resource "aws_cloudwatch_metric_alarm" "invocation_ceiling" {
   comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
   alarm_actions       = local.alarm_actions
+}
+
+# --- 5. a critical campus event: email the team now -------------------------
+resource "aws_cloudwatch_metric_alarm" "critical_alert" {
+  alarm_name        = "${local.name}-critical-alert"
+  alarm_description = "CRITICAL campus event in the last minute (overloaded room, unsafe temperature/humidity, failed equipment, or urgent request). Open the admin page -> Active alerts for the room and the reason."
+
+  namespace   = var.metric_namespace
+  metric_name = "AlertsRaised"
+  dimensions  = { Severity = "critical" }
+
+  statistic           = "Sum"
+  period              = 60
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = local.alarm_actions
+  ok_actions          = local.alarm_actions
+}
+
+# --- 6. an urgent student request: email the team now -----------------------
+resource "aws_cloudwatch_metric_alarm" "urgent_request" {
+  alarm_name        = "${local.name}-urgent-request"
+  alarm_description = "A student raised an URGENT service request. Open the admin page -> Student requests to see who, where and what."
+
+  namespace   = var.metric_namespace
+  metric_name = "UrgentRequests"
+
+  statistic           = "Sum"
+  period              = 60
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = local.alarm_actions
+}
+
+# --- 7. login is failing ------------------------------------------------------
+resource "aws_cloudwatch_metric_alarm" "auth_errors" {
+  alarm_name        = "${local.name}-auth-errors"
+  alarm_description = "The auth Lambda raised an error: nobody can sign in. Check /aws/lambda/${local.name}-auth."
+
+  namespace   = "AWS/Lambda"
+  metric_name = "Errors"
+  dimensions  = { FunctionName = aws_lambda_function.auth.function_name }
+
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = var.alarm_error_threshold
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = local.alarm_actions
+  ok_actions          = local.alarm_actions
 }
 
 # --- the dashboard ----------------------------------------------------------
@@ -138,10 +243,10 @@ resource "aws_cloudwatch_dashboard" "main" {
           stat   = "Sum",
           period = 60,
           metrics = [
-            ["AWS/Lambda", "Invocations", "FunctionName", aws_lambda_function.ingest.function_name, { label = "ingest" }],
-            [".", ".", ".", aws_lambda_function.query.function_name, { label = "query" }],
-            [".", ".", ".", aws_lambda_function.stats.function_name, { label = "stats" }],
-            [".", "Errors", ".", aws_lambda_function.ingest.function_name, { label = "ingest errors" }],
+            ["AWS/Lambda", "Invocations", "FunctionName", aws_lambda_function.api.function_name, { label = "api" }],
+            [".", ".", ".", aws_lambda_function.auth.function_name, { label = "auth (logins)" }],
+            [".", "Errors", ".", aws_lambda_function.api.function_name, { label = "api errors" }],
+            [".", "Errors", ".", aws_lambda_function.auth.function_name, { label = "auth errors" }],
           ]
         }
       },
@@ -154,8 +259,8 @@ resource "aws_cloudwatch_dashboard" "main" {
           stat   = "p95",
           period = 60,
           metrics = [
-            ["AWS/Lambda", "Duration", "FunctionName", aws_lambda_function.ingest.function_name, { label = "ingest" }],
-            [".", ".", ".", aws_lambda_function.stats.function_name, { label = "stats" }],
+            ["AWS/Lambda", "Duration", "FunctionName", aws_lambda_function.api.function_name, { label = "api" }],
+            [".", ".", ".", aws_lambda_function.auth.function_name, { label = "auth" }],
           ]
         }
       },
@@ -169,7 +274,9 @@ resource "aws_cloudwatch_dashboard" "main" {
           period = 300,
           metrics = [
             [var.metric_namespace, "EventsIngested", { label = "events" }],
-            [var.metric_namespace, "AlertsRaised", { label = "alerts" }],
+            [var.metric_namespace, "AlertsRaised", { label = "alerts (all)" }],
+            [var.metric_namespace, "AlertsRaised", "Severity", "critical", { label = "critical" }],
+            [var.metric_namespace, "UrgentRequests", { label = "urgent student requests" }],
           ]
         }
       },
@@ -207,7 +314,7 @@ resource "aws_cloudwatch_dashboard" "main" {
         properties = {
           title  = "Recent errors and warnings",
           region = var.region,
-          query  = "SOURCE '/aws/lambda/${local.name}-ingest' | fields @timestamp, level, message, reason, request_id | filter level in [\"ERROR\", \"WARN\"] | sort @timestamp desc | limit 20"
+          query  = "SOURCE '/aws/lambda/${local.name}-api' | fields @timestamp, level, message, reason, request_id | filter level in [\"ERROR\", \"WARN\"] | sort @timestamp desc | limit 20"
         }
       },
     ]

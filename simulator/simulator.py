@@ -30,7 +30,7 @@ is worth the slightly clumsier HTTP code.
 USAGE
 -----
     export CAMPUSPULSE_API=https://xxxx.execute-api.eu-west-3.amazonaws.com
-    export CAMPUSPULSE_USER=device@campuspulse.local
+    export CAMPUSPULSE_USER=admin@northbridge.edu    # must be in the 'admin' group
     export CAMPUSPULSE_PASSWORD='...'
 
     python simulator.py --number-of-events 100     # send 100 and stop
@@ -285,7 +285,7 @@ class Session:
             raise SystemExit(
                 f"Login failed ({status}): {body.get('message', body)}\n"
                 "Check CAMPUSPULSE_USER / CAMPUSPULSE_PASSWORD, and that the user "
-                "has a permanent password and is in the 'ops' group."
+                "has a permanent password and is in the 'admin' group."
             )
         self.token = body["id_token"]
         self.expires_at = time.time() + int(body.get("expires_in", 3600))

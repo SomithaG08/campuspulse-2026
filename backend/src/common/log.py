@@ -48,7 +48,8 @@ def error(message: str, request_id: Optional[str] = None, **fields: Any) -> None
     log("ERROR", message, request_id, **fields)
 
 
-def metric(name: str, value: float = 1, unit: str = "Count", **dimensions: str) -> None:
+def metric(name: str, value: float = 1, unit: str = "Count",
+           aggregate: bool = False, **dimensions: str) -> None:
     """
     Publish a CloudWatch metric by printing an EMF line.
 
@@ -56,15 +57,24 @@ def metric(name: str, value: float = 1, unit: str = "Count", **dimensions: str) 
     values is a separate custom metric, and the free tier allows ten. Splitting
     by building would give us five metrics per counter; splitting by room would
     give us eleven. We split by severity only.
+
+    aggregate=True also publishes the same value with NO dimensions, i.e. the
+    campus-wide total. CloudWatch does not sum across dimension values for you:
+    a metric published only as AlertsRaised{Severity=...} has no plain
+    AlertsRaised series, so an alarm on the plain name would never fire. That
+    was a real bug in the alert-burst alarm, found during the Oct 2026 review.
     """
     dims = {k: str(v) for k, v in dimensions.items()}
+    dimension_sets = [list(dims.keys())] if dims else [[]]
+    if aggregate and dims:
+        dimension_sets.append([])
     payload = {
         "_aws": {
             "Timestamp": int(time.time() * 1000),
             "CloudWatchMetrics": [
                 {
                     "Namespace": NAMESPACE,
-                    "Dimensions": [list(dims.keys())] if dims else [[]],
+                    "Dimensions": dimension_sets,
                     "Metrics": [{"Name": name, "Unit": unit}],
                 }
             ],

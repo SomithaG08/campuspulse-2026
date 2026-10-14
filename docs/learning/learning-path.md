@@ -24,7 +24,7 @@ Tick them off. If you cannot answer a step's questions, do not move on — it wi
 **Answer:**
 1. Trace one event from the simulator to the dashboard, naming every component it touches.
 2. Why serverless instead of EC2? Give the cost reason and the learning reason.
-3. Why do we have four Lambda functions instead of one?
+3. Why do we have five Lambda functions instead of one?
 
 ## Step 3 — APIs and JSON (45 min)
 

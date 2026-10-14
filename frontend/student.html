@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<!--
+  CampusPulse 2026 - STUDENT page.
+
+  Who sees it: Cognito group "student". What a student can do here:
+    find a free room           -> GET /stats   (occupancy, no personal data)
+    check building comfort     -> GET /stats   (average temperature)
+    report a problem           -> POST /requests
+    follow their own requests  -> GET /requests (own only - the API keys the
+                                  query on the caller's verified identity)
+  A student never sees raw sensor events, the alert list, or anyone else's
+  requests: those routes answer 403 to the student group.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CampusPulse 2026 · Students</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="dot" aria-hidden="true"></span>
+    <h1>CampusPulse <span class="year">2026</span></h1>
+    <span class="role-tag">Student</span>
+  </div>
+  <div class="session">
+    <span id="who" class="who"></span>
+    <button id="refresh" class="btn-ghost" type="button">Refresh</button>
+    <button id="logout" class="btn-ghost" type="button">Sign out</button>
+  </div>
+</header>
+
+<main class="dash">
+
+  <div id="banner" class="banner" role="status" hidden></div>
+
+  <section class="tiles" aria-label="Rooms right now">
+    <div class="tile">
+      <span class="tile-label">Rooms with space</span>
+      <span class="tile-value status-normal" id="kpi-free">–</span>
+    </div>
+    <div class="tile">
+      <span class="tile-label">Rooms full</span>
+      <span class="tile-value" id="kpi-full">–</span>
+    </div>
+    <div class="tile">
+      <span class="tile-label">My requests</span>
+      <span class="tile-value" id="kpi-mine">–</span>
+    </div>
+  </section>
+
+  <div class="grid">
+
+    <section class="card">
+      <div class="card-head">
+        <h2>Find a room</h2>
+        <span class="count muted">most space first</span>
+      </div>
+      <div id="rooms-body" class="scroll">
+        <p class="muted">Loading…</p>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h2>Report a problem</h2>
+        <span class="count muted">goes to campus operations</span>
+      </div>
+      <form id="request-form" class="form" autocomplete="off">
+        <div class="form-row">
+          <div>
+            <label for="req-building">Building</label>
+            <select id="req-building" required></select>
+          </div>
+          <div>
+            <label for="req-room">Room</label>
+            <select id="req-room" required></select>
+          </div>
+        </div>
+        <label for="req-priority">How urgent is it?</label>
+        <select id="req-priority">
+          <option value="1">Low – whenever possible</option>
+          <option value="2" selected>Normal – today</option>
+          <option value="3">Urgent – safety or a class cannot run</option>
+        </select>
+        <label for="req-message">What is the problem?</label>
+        <textarea id="req-message" maxlength="280" rows="3" required
+                  placeholder="e.g. Projector in A203 does not turn on"></textarea>
+        <button id="req-btn" class="btn" type="submit">Send request</button>
+        <p id="req-result" class="form-result" role="status" hidden></p>
+      </form>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h2>My requests</h2>
+        <span class="count" id="mine-count"></span>
+      </div>
+      <div id="mine-body" class="scroll">
+        <p class="muted">Loading…</p>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h2>Building comfort</h2>
+        <span class="count muted">average temperature today</span>
+      </div>
+      <div id="comfort-body">
+        <p class="muted">Loading…</p>
+      </div>
+    </section>
+
+  </div>
+
+  <footer class="foot">
+    <span id="updated" class="muted"></span>
+    <span id="poll-state" class="muted"></span>
+  </footer>
+</main>
+
+<script src="config.js"></script>
+<script src="app.js"></script>
+<script src="student.js"></script>
+</body>
+</html>

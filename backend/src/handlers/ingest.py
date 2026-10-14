@@ -3,11 +3,12 @@ POST /events and POST /requests - the only write path in the system.
 
 THE SHAPE OF THIS FUNCTION IS THE SECURITY ARGUMENT
 ---------------------------------------------------
-This is the function exposed to the internet, so it is the one an attacker
-reaches first. Its IAM role allows exactly one action: dynamodb:PutItem on one
-table. It cannot Query, cannot Scan, cannot Delete, cannot read a single
-stored event. If someone found a flaw in the code below, the worst they could
-do is add junk events - not read one student service request.
+Since the October 2026 consolidation this module is no longer its own Lambda:
+it is one route of the single API function (handlers/api.py). The IAM role of
+that function allows PutItem and Query on one table and nothing else - no
+Scan, no Delete, no other table - and the function runs in private subnets
+whose only network path leads to that table (see vpc.tf). The trade-off
+against the old write-only role is recorded in AD-11.
 
 Order of work, and none of it is interchangeable:
   1. authorize   - is this caller's group allowed on this route?  (403)
@@ -18,17 +19,12 @@ Order of work, and none of it is interchangeable:
   6. observe     - one structured log line, one or two metrics
 """
 
-import os
 from datetime import datetime, timezone
 
-import boto3
 from botocore.exceptions import ClientError
 
-from common import auth, keys, log, responses, rules
+from common import auth, db, keys, log, responses, rules
 from common.validation import ValidationError, validate_event, validate_service_request
-
-# Module scope: reused across warm invocations.
-_table = boto3.resource("dynamodb").Table(os.environ["TABLE_NAME"])
 
 
 def handler(event, context):
@@ -37,9 +33,10 @@ def handler(event, context):
     is_service_request = "/requests" in route
 
     # ---- 1. Authorization ------------------------------------------------
-    # Submitting sensor data is an operations action. Staff may raise a
-    # service request but may not inject readings into the campus telemetry.
-    allowed = (auth.OPS, auth.STAFF) if is_service_request else (auth.OPS,)
+    # Submitting sensor data is an administrator action (the simulator signs
+    # in as an admin). Students may raise a service request but may never
+    # inject readings into the campus telemetry.
+    allowed = (auth.ADMIN, auth.STUDENT) if is_service_request else (auth.ADMIN,)
     refusal = auth.check_group(event, allowed)
     if refusal:
         claims = auth.get_claims(event)
@@ -51,8 +48,11 @@ def handler(event, context):
     # ---- 2. Validation ---------------------------------------------------
     try:
         if is_service_request:
-            username = auth.get_username(auth.get_claims(event))
-            clean = validate_service_request(event.get("body"), username, now=now)
+            claims = auth.get_claims(event)
+            clean = validate_service_request(event.get("body"), auth.get_email(claims), now=now)
+            # The stable id is what GET /requests keys on, so a student can
+            # only ever list requests stored under their own Cognito sub.
+            clean["requester_id"] = auth.get_user_id(claims)
         else:
             clean = validate_event(event.get("body"), now=now)
     except ValidationError as exc:
@@ -69,7 +69,7 @@ def handler(event, context):
     item = keys.build_item(clean, severity, reason, now=now)
 
     try:
-        _table.put_item(Item=_to_dynamo(item))
+        db.table().put_item(Item=_to_dynamo(item))
     except ClientError as exc:
         code = exc.response.get("Error", {}).get("Code", "")
         log.error("failed to store event", request_id, reason=code, event_id=clean["event_id"])
@@ -93,9 +93,15 @@ def handler(event, context):
         alert=alert,
         latency_ms=latency_ms,
     )
-    log.metric("EventsIngested", 1, Severity=severity)
+    log.metric("EventsIngested", 1, aggregate=True, Severity=severity)
     if alert:
-        log.metric("AlertsRaised", 1, Severity=severity)
+        # Published with and without the Severity dimension: the alarms that
+        # email the team watch the critical series and the campus-wide total.
+        log.metric("AlertsRaised", 1, aggregate=True, Severity=severity)
+    if clean["event_type"] == "service_request" and severity == rules.CRITICAL:
+        # An urgent student request: its own metric so its own alarm can email
+        # the team immediately (alarms.tf, urgent_request).
+        log.metric("UrgentRequests", 1)
 
     return responses.created({
         "event_id": clean["event_id"],

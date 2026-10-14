@@ -9,7 +9,8 @@
 # ---------------------------------------------------------------------------
 
 locals {
-  functions = ["health", "auth", "ingest", "query", "stats"]
+  # Two functions since the October 2026 consolidation (was five).
+  functions = ["api", "auth"]
 }
 
 resource "aws_cloudwatch_log_group" "lambda" {

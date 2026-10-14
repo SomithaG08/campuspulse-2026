@@ -26,10 +26,15 @@ echo "bucket : $BUCKET"
 
 rm -rf "$BUILD"
 mkdir -p "$BUILD"
-cp "$ROOT/frontend/index.html" "$ROOT/frontend/style.css" "$ROOT/frontend/app.js" "$BUILD/"
+# Three pages since October 2026: sign-in, administrator, student.
+cp "$ROOT/frontend/index.html" "$ROOT/frontend/admin.html" "$ROOT/frontend/student.html" \
+   "$ROOT/frontend/style.css" "$ROOT/frontend/app.js" "$ROOT/frontend/admin.js" \
+   "$ROOT/frontend/student.js" "$BUILD/"
 
 # config.js is the only file that differs between deployments.
-sed "s|REPLACE_WITH_API_ENDPOINT|$API|" "$ROOT/frontend/config.js" > "$BUILD/config.js"
+# The API_URL line is rewritten whatever it currently holds (a placeholder or
+# a previous deployment's endpoint), so a stale endpoint can never be shipped.
+sed -E "s|API_URL: \"[^\"]*\"|API_URL: \"$API\"|" "$ROOT/frontend/config.js" > "$BUILD/config.js"
 
 grep -q "REPLACE_WITH" "$BUILD/config.js" && { echo "config.js substitution failed"; exit 1; }
 
@@ -39,5 +44,7 @@ aws s3 sync "$BUILD/" "s3://$BUCKET/" --delete \
   --cache-control "public, max-age=60"
 
 echo
-echo "Dashboard: $SITE"
+echo "Sign in : $SITE/index.html"
+echo "Admin   : $SITE/admin.html"
+echo "Student : $SITE/student.html"
 echo "Smoke test: curl -s $API/health"

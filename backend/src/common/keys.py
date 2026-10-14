@@ -30,6 +30,11 @@ def alert_partition(timestamp: str) -> str:
     return f"ALERT#{timestamp[:10]}"
 
 
+def requester_partition(requester_id: str) -> str:
+    """GSI3 key: every service request raised by one user, across days."""
+    return f"USER#{requester_id}"
+
+
 def sort_key(timestamp: str, event_id: str) -> str:
     """
     Sort keys are stored in order, so a key beginning with the timestamp means
@@ -61,5 +66,13 @@ def build_item(event: dict, severity: str, reason: str, now: datetime = None) ->
     if rules.is_alert(severity):
         item["gsi2pk"] = alert_partition(ts)
         item["gsi2sk"] = sk
+
+    # Sparse like GSI2: only service requests carry a requester, so GSI3 holds
+    # requests and nothing else. It is what lets a student list THEIR OWN
+    # requests with one Query, and never anybody else's.
+    requester_id = event.get("requester_id")
+    if requester_id:
+        item["gsi3pk"] = requester_partition(requester_id)
+        item["gsi3sk"] = sk
 
     return item

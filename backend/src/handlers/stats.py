@@ -18,21 +18,18 @@ scalability section explains the fix (maintain counters on write, or
 pre-aggregate per hour) instead of pretending the ceiling does not exist.
 """
 
-import os
-
-import boto3
 from botocore.exceptions import ClientError
 
-from common import aggregate, auth, log, queries, responses
+from common import aggregate, auth, db, log, queries, responses
 from common.validation import ValidationError
-
-_table = boto3.resource("dynamodb").Table(os.environ["TABLE_NAME"])
 
 
 def handler(event, context):
     request_id = getattr(context, "aws_request_id", None)
 
-    refusal = auth.check_group(event, (auth.OPS, auth.STAFF))
+    # Both roles: administrators get the operational picture, students use the
+    # same numbers to find a free room. Nothing personal is in this response.
+    refusal = auth.check_group(event, (auth.ADMIN, auth.STUDENT))
     if refusal:
         return responses.forbidden(refusal, request_id)
 
@@ -52,7 +49,7 @@ def handler(event, context):
     try:
         while True:
             args = queries.day_events_for_stats(date, building, token)
-            result = _table.query(**args)
+            result = db.table().query(**args)
             items.extend(result.get("Items", []))
             pages += 1
 

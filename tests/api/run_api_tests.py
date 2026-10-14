@@ -12,8 +12,8 @@ anybody can run it immediately and nothing can fail because of an install.
 
 USAGE
     export CAMPUSPULSE_API=https://xxxx.execute-api.eu-west-3.amazonaws.com
-    export OPS_USER=ops@northbridge.edu       OPS_PASSWORD='...'
-    export STAFF_USER=staff@northbridge.edu   STAFF_PASSWORD='...'
+    export ADMIN_USER=admin@northbridge.edu       ADMIN_PASSWORD='...'
+    export STUDENT_USER=student@northbridge.edu   STUDENT_PASSWORD='...'
 
     python tests/api/run_api_tests.py
 
@@ -31,10 +31,10 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 API = (os.environ.get("CAMPUSPULSE_API") or "").rstrip("/")
-OPS_USER = os.environ.get("OPS_USER", "ops@northbridge.edu")
-OPS_PASSWORD = os.environ.get("OPS_PASSWORD", "")
-STAFF_USER = os.environ.get("STAFF_USER", "staff@northbridge.edu")
-STAFF_PASSWORD = os.environ.get("STAFF_PASSWORD", "")
+ADMIN_USER = os.environ.get("ADMIN_USER", "admin@northbridge.edu")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
+STUDENT_USER = os.environ.get("STUDENT_USER", "student@northbridge.edu")
+STUDENT_PASSWORD = os.environ.get("STUDENT_PASSWORD", "")
 
 results = []
 tokens = {}
@@ -113,19 +113,19 @@ def test_health():
 def test_authentication():
     print("\nT2  Authentication")
 
-    status, body, _ = call("POST", "/login", {"username": OPS_USER, "password": OPS_PASSWORD})
-    if check("T2.1", "valid ops credentials return a token", status == 200 and "id_token" in body,
+    status, body, _ = call("POST", "/login", {"username": ADMIN_USER, "password": ADMIN_PASSWORD})
+    if check("T2.1", "valid admin credentials return a token", status == 200 and "id_token" in body,
              f"got {status}: {body.get('message', '')}"):
-        tokens["ops"] = body["id_token"]
-        check("T2.2", "login reports the ops role", body.get("role") == "ops", str(body.get("role")))
+        tokens["admin"] = body["id_token"]
+        check("T2.2", "login reports the admin role", body.get("role") == "admin", str(body.get("role")))
 
-    status, body, _ = call("POST", "/login", {"username": STAFF_USER, "password": STAFF_PASSWORD})
-    if check("T2.3", "valid staff credentials return a token", status == 200 and "id_token" in body,
+    status, body, _ = call("POST", "/login", {"username": STUDENT_USER, "password": STUDENT_PASSWORD})
+    if check("T2.3", "valid student credentials return a token", status == 200 and "id_token" in body,
              f"got {status}: {body.get('message', '')}"):
-        tokens["staff"] = body["id_token"]
-        check("T2.4", "login reports the staff role", body.get("role") == "staff", str(body.get("role")))
+        tokens["student"] = body["id_token"]
+        check("T2.4", "login reports the student role", body.get("role") == "student", str(body.get("role")))
 
-    status, wrong_pw, _ = call("POST", "/login", {"username": OPS_USER, "password": "definitely-wrong-123!"})
+    status, wrong_pw, _ = call("POST", "/login", {"username": ADMIN_USER, "password": "definitely-wrong-123!"})
     check("T2.5", "wrong password is rejected with 401", status == 401, f"got {status}")
 
     status, unknown, _ = call("POST", "/login", {"username": "nobody@northbridge.edu", "password": "whatever-123!"})
@@ -137,7 +137,7 @@ def test_authentication():
           wrong_pw.get("message") == unknown.get("message"),
           f"{wrong_pw.get('message')!r} vs {unknown.get('message')!r}")
 
-    status, _, _ = call("POST", "/login", {"username": OPS_USER})
+    status, _, _ = call("POST", "/login", {"username": ADMIN_USER})
     check("T2.8", "missing password is rejected with 400", status == 400, f"got {status}")
 
 
@@ -153,20 +153,20 @@ def test_authorization():
     status, _, _ = call("GET", "/stats")
     check("T3.2", "GET /stats without a token returns 401", status == 401, f"got {status}")
 
-    status, _, _ = call("POST", "/events", event(), tokens.get("staff"))
-    check("T3.3", "staff CANNOT submit events (403)", status == 403, f"got {status}")
+    status, _, _ = call("POST", "/events", event(), tokens.get("student"))
+    check("T3.3", "student CANNOT submit sensor events (403)", status == 403, f"got {status}")
 
-    status, _, _ = call("GET", "/alerts", token=tokens.get("staff"))
-    check("T3.4", "staff CANNOT read alerts (403)", status == 403, f"got {status}")
+    status, _, _ = call("GET", "/alerts", token=tokens.get("student"))
+    check("T3.4", "student CANNOT read alerts (403)", status == 403, f"got {status}")
 
-    status, _, _ = call("GET", "/events?limit=5", token=tokens.get("staff"))
-    check("T3.5", "staff CAN read events (200)", status == 200, f"got {status}")
+    status, _, _ = call("GET", "/events?limit=5", token=tokens.get("student"))
+    check("T3.5", "student CANNOT read raw events (403)", status == 403, f"got {status}")
 
-    status, _, _ = call("GET", "/stats", token=tokens.get("staff"))
-    check("T3.6", "staff CAN read statistics (200)", status == 200, f"got {status}")
+    status, _, _ = call("GET", "/stats", token=tokens.get("student"))
+    check("T3.6", "student CAN read statistics (200)", status == 200, f"got {status}")
 
-    status, _, _ = call("GET", "/alerts", token=tokens.get("ops"))
-    check("T3.7", "ops CAN read alerts (200)", status == 200, f"got {status}")
+    status, _, _ = call("GET", "/alerts", token=tokens.get("admin"))
+    check("T3.7", "admin CAN read alerts (200)", status == 200, f"got {status}")
 
     status, _, _ = call("GET", "/stats", token="not.a.real.token")
     check("T3.8", "a malformed token returns 401", status == 401, f"got {status}")
@@ -177,10 +177,10 @@ def test_authorization():
 # ---------------------------------------------------------------------------
 def test_ingestion():
     print("\nT4  Event ingestion")
-    ops = tokens.get("ops")
+    admin = tokens.get("admin")
 
     body_sent = event(value=10)
-    status, body, ms = call("POST", "/events", body_sent, ops)
+    status, body, ms = call("POST", "/events", body_sent, admin)
     check("T4.1", "a valid event is stored (201)", status == 201, f"got {status}: {body}")
     check("T4.2", "a normal event is classified normal",
           body.get("severity") == "normal" and body.get("alert") is False, str(body))
@@ -190,7 +190,7 @@ def test_ingestion():
     # server must overrule it: a device that could declare itself normal could
     # silence any alert.
     over = event(value=58, severity="normal")
-    status, body, _ = call("POST", "/events", over, ops)
+    status, body, _ = call("POST", "/events", over, admin)
     check("T4.3", "an over-capacity event is stored (201)", status == 201, f"got {status}")
     check("T4.4", "SERVER OVERRULES the client's severity -> critical",
           body.get("severity") == "critical" and body.get("alert") is True, str(body))
@@ -202,8 +202,9 @@ def test_ingestion():
     status, body, _ = call("POST", "/requests",
                            {"building": "Library-A", "room": "A203",
                             "message": "API test - projector not working", "priority": 3},
-                           tokens.get("staff"))
-    check("T4.6", "staff CAN raise a service request (201)", status == 201, f"got {status}: {body}")
+                           tokens.get("student"))
+    check("T4.6", "student CAN raise a service request (201)", status == 201, f"got {status}: {body}")
+    globals()["_request_id"] = body.get("event_id")
     check("T4.7", "an urgent request is critical", body.get("severity") == "critical", str(body))
 
 
@@ -212,7 +213,7 @@ def test_ingestion():
 # ---------------------------------------------------------------------------
 def test_validation():
     print("\nT5  Invalid input")
-    ops = tokens.get("ops")
+    admin = tokens.get("admin")
 
     cases = [
         ("T5.1", "missing required field", {k: v for k, v in event().items() if k != "building"}),
@@ -227,14 +228,14 @@ def test_validation():
          event(timestamp=(datetime.now(timezone.utc) - timedelta(days=3)).strftime("%Y-%m-%dT%H:%M:%SZ"))),
     ]
     for test_id, description, payload in cases:
-        status, body, _ = call("POST", "/events", payload, ops)
+        status, body, _ = call("POST", "/events", payload, admin)
         check(test_id, f"{description} -> 400", status == 400,
               f"got {status}: {body.get('message', body)}")
 
-    status, body, _ = call("GET", "/events?limit=9999", token=ops)
+    status, body, _ = call("GET", "/events?limit=9999", token=admin)
     check("T5.9", "limit above the maximum -> 400", status == 400, f"got {status}")
 
-    status, body, _ = call("GET", "/events?date=05-10-2026", token=ops)
+    status, body, _ = call("GET", "/events?date=05-10-2026", token=admin)
     check("T5.10", "malformed date -> 400", status == 400, f"got {status}")
 
     # Every rejection must explain itself: an error the caller cannot act on
@@ -248,26 +249,26 @@ def test_validation():
 # ---------------------------------------------------------------------------
 def test_reads():
     print("\nT6  Queries and statistics")
-    ops = tokens.get("ops")
+    admin = tokens.get("admin")
 
-    status, body, ms = call("GET", "/events?limit=10", token=ops)
+    status, body, ms = call("GET", "/events?limit=10", token=admin)
     check("T6.1", "GET /events returns a list", status == 200 and isinstance(body.get("events"), list),
           f"got {status}")
     check("T6.2", "events are newest first",
           len(body.get("events", [])) < 2 or
           body["events"][0]["timestamp"] >= body["events"][1]["timestamp"], "ordering wrong")
 
-    status, body, _ = call("GET", "/events?building=Library-A&limit=5", token=ops)
+    status, body, _ = call("GET", "/events?building=Library-A&limit=5", token=admin)
     check("T6.3", "filtering by building returns only that building",
           status == 200 and all(e["building"] == "Library-A" for e in body.get("events", [])),
           f"got {status}")
 
-    status, body, _ = call("GET", "/alerts", token=ops)
+    status, body, _ = call("GET", "/alerts", token=admin)
     check("T6.4", "GET /alerts returns only abnormal events",
           status == 200 and all(e["severity"] != "normal" for e in body.get("alerts", [])),
           f"got {status}")
 
-    status, stats, ms = call("GET", "/stats", token=ops)
+    status, stats, ms = call("GET", "/stats", token=admin)
     required = ["total_events", "alert_count", "events_by_type", "events_by_severity",
                 "current_occupancy", "energy_kwh_by_building", "urgent_requests"]
     missing = [f for f in required if f not in stats]
@@ -283,25 +284,53 @@ def test_reads():
 # ---------------------------------------------------------------------------
 def test_integration():
     print("\nT7  Integration: one event, all the way through")
-    ops = tokens.get("ops")
+    admin = tokens.get("admin")
     event_id = globals().get("_alert_event_id")
 
     if not event_id:
         check("T7.1", "integration skipped - no alert event was created", False, "T4 did not run")
         return
 
-    status, body, _ = call("GET", "/alerts?limit=50", token=ops)
+    status, body, _ = call("GET", "/alerts?limit=50", token=admin)
     found = any(a.get("event_id") == event_id for a in body.get("alerts", []))
     check("T7.1", "the critical event submitted in T4 appears in /alerts", found,
           f"looking for {event_id}")
 
-    status, body, _ = call("GET", "/events?limit=50", token=ops)
+    status, body, _ = call("GET", "/events?limit=50", token=admin)
     found = any(e.get("event_id") == event_id for e in body.get("events", []))
     check("T7.2", "the same event appears in /events", found, f"looking for {event_id}")
 
-    status, stats, _ = call("GET", "/stats", token=ops)
+    status, stats, _ = call("GET", "/stats", token=admin)
     check("T7.3", "the alert is counted in the statistics", stats.get("alert_count", 0) > 0,
           f"alert_count={stats.get('alert_count')}")
+
+
+# ---------------------------------------------------------------------------
+# T8 - service requests: the student page and the admin page
+# ---------------------------------------------------------------------------
+def test_requests():
+    print("\nT8  Service requests (student page / admin page)")
+    request_id = globals().get("_request_id")
+
+    status, body, _ = call("GET", "/requests", token=tokens.get("student"))
+    mine = body.get("requests", [])
+    check("T8.1", "student GET /requests returns their own requests (200)",
+          status == 200 and any(r.get("event_id") == request_id for r in mine),
+          f"got {status}, looking for {request_id}")
+    check("T8.2", "student view does not expose who raised a request",
+          all("requested_by" not in r for r in mine), "requested_by present")
+
+    status, body, _ = call("GET", "/requests", token=tokens.get("admin"))
+    rows = body.get("requests", [])
+    match = [r for r in rows if r.get("event_id") == request_id]
+    check("T8.3", "admin GET /requests sees the student's request (200)",
+          status == 200 and bool(match), f"got {status}")
+    check("T8.4", "admin view shows who raised it",
+          bool(match) and match[0].get("requested_by") == STUDENT_USER,
+          str(match[0].get("requested_by")) if match else "not found")
+
+    status, _, _ = call("GET", "/requests")
+    check("T8.5", "GET /requests without a token returns 401", status == 401, f"got {status}")
 
 
 # ---------------------------------------------------------------------------
@@ -309,8 +338,8 @@ def main():
     if not API:
         print("CAMPUSPULSE_API is not set. See the docstring at the top of this file.")
         return 2
-    if not OPS_PASSWORD or not STAFF_PASSWORD:
-        print("OPS_PASSWORD and STAFF_PASSWORD must be set.")
+    if not ADMIN_PASSWORD or not STUDENT_PASSWORD:
+        print("ADMIN_PASSWORD and STUDENT_PASSWORD must be set.")
         return 2
 
     print(f"\nCampusPulse API tests")
@@ -319,14 +348,15 @@ def main():
 
     test_health()
     test_authentication()
-    if "ops" not in tokens:
-        print("\n  Cannot continue: ops login failed. Fix that first.")
+    if "admin" not in tokens:
+        print("\n  Cannot continue: admin login failed. Fix that first.")
         return 1
     test_authorization()
     test_ingestion()
     test_validation()
     test_reads()
     test_integration()
+    test_requests()
 
     passed = sum(1 for r in results if r["status"] == "PASS")
     failed = len(results) - passed

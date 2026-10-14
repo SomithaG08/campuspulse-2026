@@ -1,5 +1,7 @@
 # Final Requirement Audit
 
+> **12 October 2026:** the five review corrections (VPC, backup, team email alerts, admin/student pages, two Lambdas) are implemented — see `21-professor-corrections.md`. Rows marked *(re-capture)* need fresh evidence from the corrected deployment.
+
 Every requirement in the brief, mapped to evidence. **Four status words only:**
 
 | Status | Means |
@@ -9,7 +11,7 @@ Every requirement in the brief, mapped to evidence. **Four status words only:**
 | **Not implemented** | We did not build it |
 | **Not verified** | It exists in code or configuration but nobody has observed it working |
 
-**Everything that depends on a deployment is currently Not verified**, because nothing is deployed. That is stated once here rather than repeated fifty times, and it is the single thing that changes most of this table.
+**Revised 11 October 2026.** The first version of this audit was written before deployment and said "nothing is deployed". That is no longer true: the system was deployed to eu-west-3 on 5 October 2026 and the evidence is in `docs/evidence/` (API test run 45/45 on 2026-10-05T13:04Z, 401/403 screenshots, dashboard, CloudWatch, IAM simulation, budget, credits). Every row below was re-checked against that evidence. A row is **Complete** only if a file in `docs/evidence/` (or a test run) shows it.
 
 ---
 
@@ -17,93 +19,92 @@ Every requirement in the brief, mapped to evidence. **Four status words only:**
 
 | # | Requirement | Status | Evidence |
 |---|---|---|---|
-| F1 | Real-time or near-real-time ingestion | **Not verified** | `simulator/simulator.py`, `handlers/ingest.py`, 18 simulator tests |
-| F2 | User-facing API or web interface | **Not verified** | 7 endpoints in `apigateway.tf`; `frontend/` rendered and inspected |
-| F3 | Persistent storage | **Not verified** | `dynamodb.tf` — table, 2 GSIs, TTL, PITR |
-| F4 | Data processing / analytics | **Complete (logic)**, Not verified (deployed) | `common/rules.py`, `common/aggregate.py`, 52 tests |
-| F5 | Auth + authorization, ≥2 roles | **Not verified** | `cognito.tf`, `common/auth.py`, permission matrix, API tests T3 |
-| F6 | Monitoring, logging, observability | **Not verified** | `common/log.py`, `alarms.tf` — 4 alarms, 1 dashboard |
-| F7 | Dashboard / visual output | **Not verified** | `frontend/` — rendered light and dark, no console errors |
+| F1 | Real-time or near-real-time ingestion | **Complete** | `simulator.py` → `POST /events`; API tests T4 (live run 2026-10-05, `api-test-results.json`); `dashboard-live.png` |
+| F2 | User-facing API or web interface | **Complete** | 7 routes in `apigateway.tf`; API tests 45/45; `dashboard-live.png` |
+| F3 | Persistent storage | **Complete** | DynamoDB table + 2 GSIs, TTL, PITR (`verify-deployment.png`); API test T7 writes then reads back |
+| F4 | Data processing / analytics | **Complete** | `rules.py`, `aggregate.py`, 52 unit tests; live `/stats` on `dashboard-live.png`. *Known flaw: energy totals — see note E1 below* |
+| F5 | Auth + authorization, ≥2 roles | **Complete** (re-capture) | Cognito groups `admin`/`student` (renamed after the review); role matrix unit-tested (`test_api_router.py`); `auth-401.png`, `auth-403-200.png` from 5 Oct; API tests T2/T3/T8 |
+| F6 | Monitoring, logging, observability | **Complete** | `cloudwatch-dashboard.png`; 4 alarms in `alarms.tf` |
+| F7 | Dashboard / visual output | **Complete** (re-capture) | Two pages after the review: `admin.html`, `student.html`; `dashboard-live.png` is the 5 Oct single dashboard |
 
 ## §6 Architecture requirements
 
 | # | Requirement | Status | Evidence |
 |---|---|---|---|
-| A1 | Scalability | **Partial** | Analysis written with the ~1,000 writes/sec ceiling and its fix named. **Gap: no measured numbers** |
-| A2 | High availability | **Complete (design + honesty)** | Managed services, multi-AZ by default, stateless compute; single-region stated plainly |
-| A3 | Security | **Complete (design), Not verified (runtime)** | Threat model; IAM audited against actual code calls — exact match |
-| A4 | Cost optimization | **Partial** | Cost model with sources; several figures still `unverified`; **budget not yet created** |
-| A5 | Observability | **Not verified** | 4 alarms, 1 dashboard, troubleshooting runbook |
-| A6 | Disaster recovery | **Partial** | PITR configured, procedure documented. **Gap: no restore performed, RTO unmeasured** |
+| A1 | Scalability | **Partial** | Analysis with the ~1,000 writes/s per-partition ceiling and its fix. **Gap: no load test; only default-rate latency measured** |
+| A2 | High availability | **Complete** | Managed multi-AZ services; the `api` Lambda in two AZ subnets; stateless compute; single-region stated plainly |
+| A3 | Security | **Partial** | JWT authorizer, group checks, least-privilege IAM demonstrated (`auth-*.png`, `iam-simulate.png`); **private-subnet VPC with a table-only endpoint** (Oct 2026). **Gap: the pages are served over HTTP from the S3 website endpoint (API is HTTPS)** |
+| A4 | Cost optimization | **Partial** | Budget exists (`budget.png`), credits recorded (`credits.png`). **Gap: figures are account-wide; CampusPulse-only cost not isolated** |
+| A5 | Observability | **Complete** | `cloudwatch-dashboard.png`, structured logs, EMF metrics, troubleshooting runbook |
+| A6 | Disaster recovery | **Partial → Complete once the drill runs** | PITR + **AWS Backup daily/weekly in a separate vault** + S3 versioning (Oct 2026); `restore-drill.sh` measures the RTO. **Gap until it is run: RTO unmeasured** |
 
 ## §7 Implementation requirements
 
 | # | Requirement | Status | Evidence |
 |---|---|---|---|
-| I1 | Containerized **or** serverless backend | **Not verified** | 5 Lambda functions in `lambda.tf` |
-| I2 | Working API or web interface | **Not verified** | API + dashboard |
-| I3 | Configured cloud networking | **Complete (as equivalent concepts)** | No VPC by design; trust zones in the diagram; `11-networking-explained.md` |
-| I4 | Reproducible deployment | **Partial** | Terraform + scripts + runbook. **Gap: nobody has deployed from the guide** |
-| I5 | Monitoring visualization | **Not verified** | CloudWatch dashboard, 6 widgets |
-| I6 | ≥1 security mechanism demonstrated | **Not verified** | Three layers; the 401/403/200 demonstration is scripted but not run |
+| I1 | Containerized **or** serverless backend | **Complete** | 2 Lambda functions grouped by business domain: Public Auth Gateway (`auth`, outside VPC) and Protected Campus Operations Platform (`api`, inside private VPC); 5 Oct screenshot shows the earlier 5 |
+| I2 | Working API or web interface | **Complete** | API tests 45/45; `dashboard-live.png` |
+| I3 | Configured cloud networking | **Complete** (re-capture) | **VPC added after the review**: 2 private subnets, SG, DynamoDB gateway endpoint, flow logs (`vpc.tf`, AD-10) |
+| I4 | Reproducible deployment | **Partial** | Terraform + scripts + runbook; one member deployed. **Not verified: a second member redeploying from the guide alone** |
+| I5 | Monitoring visualization | **Complete** | `cloudwatch-dashboard.png` (6 widgets) |
+| I6 | ≥1 security mechanism demonstrated | **Complete** | `auth-401.png`, `auth-403-200.png` |
 | I7 | Simulated data generation | **Complete** | `simulator.py`, 18 tests, 1000 events through the real validator |
 
 ## §8 Cost constraints
 
 | # | Requirement | Status | Evidence |
 |---|---|---|---|
-| C1 | Use free tier / low cost | **Complete (design)** | Nothing bills by the hour. No EC2, RDS, NAT Gateway, load balancer |
-| C2 | **Budget / billing alert with evidence** | **Not implemented yet** | `budget.tf` exists; **no account has one — mandatory** |
-| C3 | Stop/delete unused resources | **Complete (procedure)** | `cleanup.md`, `terraform destroy` |
-| C4 | Avoid expensive services | **Complete** | Forbidden list in the cost warning; verification script checks none are running |
-| C5 | Cost estimate table | **Partial** | Table exists; some rows `unverified` pending `verify-prices.sh` |
-| C6 | Justify non-free resources | **Complete** | DynamoDB on-demand and PITR, justified in AD-4 and §7 of the report |
+| C1 | Use free tier / low cost | **Complete** | Nothing bills by the hour. No EC2, RDS, NAT Gateway, load balancer |
+| C2 | Budget / billing alert with evidence | **Complete** | `budget.tf`; `budget.png` ($10 monthly, alerts at 50/80/forecast-100 %) |
+| C3 | Stop/delete unused resources | **Complete (procedure)** | `cleanup.md`, `terraform destroy` — to be run after grading |
+| C4 | Avoid expensive services | **Complete** | Forbidden list; `verify-deployment.sh` checks none are running |
+| C5 | Cost estimate table | **Partial** | Table exists; DynamoDB and S3 prices still marked `unverified` |
+| C6 | Justify non-free resources | **Complete** | DynamoDB on-demand and PITR, AD-4 and report §7 |
 
 ## §9 Architecture diagram
 
 | # | Requirement | Status |
 |---|---|---|
-| D1-D7 | Components, flows, layers, networking, security zones, external sources, monitoring/backup | **Complete** — ASCII + Mermaid + all 10 connections explained |
-| D8 | Understandable without the code | **Not verified** — needs the least technical teammate to confirm |
-| — | **Exported as PDF/image for submission** | **Not implemented** |
+| D1-D7 | Components, flows, layers, networking, security zones, external sources, monitoring/backup | **Complete** — ASCII + Mermaid + slide 3 |
+| D8 | Understandable without the code | **Not verified** |
+| — | Exported as PDF/image for submission | **Not verified** — check before submitting |
 
 ## §10 Report
 
 | Section | Status |
 |---|---|
-| All eleven required sections | **Complete (structure and content)** |
-| Delivered as PDF | **Not implemented** |
-| Free of invented results | **Complete** — 51 placeholders mark what is missing |
-| §11.6 what the team learned | **Not implemented** — each member writes their own |
-| Contribution table | **Not implemented** |
+| All eleven required sections | **Complete** |
+| No open placeholders | **Complete** — none remain in `implementation-report.md` |
+| §11.6 what the team learned, §12 contribution table | **Complete** — filled by the team |
+| Delivered as PDF | **Not verified** |
 
 ## §11 Presentation
 
 | # | Requirement | Status |
 |---|---|---|
-| P1 | 15-minute presentation | **Partial** — 17 slides + script; **never timed** |
-| P2-P7 | Overview, architecture, demo, security/scalability, cost, lessons | **Complete (content)** |
-| P8 | **All members participate and can explain** | **Not verified** — never rehearsed |
-| — | Backup demo video | **Not implemented** |
+| P1 | Presentation | **Complete (content)** — `CampusPulse_2026_Final_Presentation.pptx` (15 slides) + `05-final-speaking-script.md` for the 10-minute slot. **Not verified:** timed rehearsal |
+| P2-P7 | Overview, architecture, demo, security/scalability, cost, lessons | **Complete** |
+| P8 | All members participate and can explain | **Not verified** — rehearsal |
+| — | Backup demo video | **Not verified** |
 
 ## §13 Submission
 
 | # | Deliverable | Status |
 |---|---|---|
-| S1 | Architecture diagram as PDF/image | **Not implemented** (source exists) |
-| S2 | Report as PDF | **Not implemented** (source exists) |
-| S3 | Repository link | **Not implemented** — repo not yet pushed |
+| S1 | Architecture diagram as PDF/image | **Not verified** |
+| S2 | Report as PDF | **Not verified** |
+| S3 | Repository link | **Complete** — `github.com/SomithaG08/campuspulse-2026` (branch `develop`) |
 | S4 | Deployment guide / scripts | **Complete** |
-| S5 | Demo evidence | **Not implemented** — checklist ready, nothing collected |
-| S6 | Presentation slides | **Complete** — `CampusPulse-2026.pptx` |
+| S5 | Demo evidence | **Complete** — `docs/evidence/` |
+| S6 | Presentation slides | **Partial** — final deck is in the project root but **not yet committed**; the old `docs/presentation/CampusPulse-2026.pptx` is deleted locally but the deletion is not committed |
 
 ## §15 Optional features
 
 | Feature | Status |
 |---|---|
 | Anomaly detection | **Partial** — threshold rules; no statistical model, by choice |
-| Email alerting | **Partial** — SNS behind `alarm_email`, off by default |
-| Infrastructure as Code | **Complete** — 61 resources in Terraform |
+| Email alerting | **Complete** — all 7 alarms email the team's school addresses via SNS (Oct 2026, AD-13) |
+| Infrastructure as Code | **Complete** — Terraform; Cognito groups added back as code in Oct 2026 (import once) |
 | CI/CD | **Not implemented** — out of scope by choice |
 | Container orchestration | **Not implemented** — out of scope by choice |
 | Multi-cloud comparison | **Not implemented** |
@@ -113,81 +114,24 @@ Every requirement in the brief, mapped to evidence. **Four status words only:**
 
 | # | Requirement | Status |
 |---|---|---|
-| X1 | Sources cited | **Complete** — `REFERENCES.md` with dates |
-| X2 | Work is the team's own | **Complete** — AI assistance disclosed in the report's references |
-| X3 | Nothing fabricated | **Complete** — no invented screenshot, cost, test result or metric anywhere |
+| X1 | Sources cited | **Complete** — `REFERENCES.md` |
+| X2 | Work is the team's own | **Complete** — AI assistance disclosed in the report |
+| X3 | Nothing fabricated | **Complete** — corrections of October 2026 removed claims that were not true (HTTPS everywhere, RPO ≈ 0, provider "removed" a resource) |
 
 ---
 
-## Score against the grading criteria
+## Open technical note
 
-| Criterion | Weight | Where it stands |
-|---|---|---|
-| Architecture quality | 25% | **Strong.** Diagram, nine justified decisions, scalability and DR reasoning, limits stated |
-| Implementation completeness | 25% | **Built, unproven.** Everything exists; nothing is deployed. **This is where the remaining risk is concentrated** |
-| Security and cloud practices | 15% | **Strong.** Audited IAM, threat model, three enforcement layers — needs the 401/403/200 evidence |
-| Technical report | 20% | **Strong structure, 51 gaps.** Fills quickly once evidence exists |
-| Presentation | 15% | **Ready, unrehearsed.** Deck, script, demo runbook, Q&A all written |
-
-**The single highest-value hour you can spend is deploying.** It converts most "Not verified" rows to "Complete" at once, and unblocks about forty of the report's placeholders.
+**E1 — energy totals.** Each energy event is compared with the building's `energy_baseline_kwh`, but `/stats` *sums* every energy reading of the day. Because the simulator sends energy readings at random times, the daily total depends on how many readings happened to be sent, not on real consumption, and it is compared mentally with a per-reading baseline. Either define each reading as "kWh in the last hour" and send exactly one per building per hour, or report the average reading per building. Not yet changed — needs a team decision because it changes the `/stats` contract and the dashboard.
 
 ---
 
 ## Remaining manual tasks — only things that genuinely need a human
 
-### Before anything else (5 minutes)
-
-1. **Check the AWS account's plan and creation date** in the Billing console. On the free plan it closes at six months or credit depletion. Record it in `docs/evidence/cost/`.
-
-### Deployment (about 90 minutes, follow `docs/deployment/05-runbook.md`)
-
-2. `terraform init && validate && plan && apply` — **you are the first to run validate**; expect to fix something.
-3. **Verify the budget exists and screenshot it** — mandatory, requirement C2.
-4. Create the three Cognito users and set permanent passwords.
-5. Run `scripts/verify-deployment.sh`, screenshot the output.
-6. Run `scripts/deploy-dashboard.sh`.
-7. Run `python tests/api/run_api_tests.py` and **commit the generated JSON**.
-8. Run `scripts/verify-prices.sh` and replace the `unverified` rows in the cost model.
-
-### Evidence (about 1 hour — `docs/evidence/CHECKLIST.md`)
-
-9. Dashboard with data · a red alert · the DynamoDB item · the matching log line.
-10. **Staff token: 403 on `/alerts`, 200 on `/events`.** The two-role evidence.
-11. **Drive an alarm into ALARM deliberately** and screenshot it.
-12. **Perform a restore and time it.** That number fills the RTO blank.
-13. `aws iam simulate-principal-policy` for `cp-ingest` — machine-generated least-privilege proof.
-14. Credit balance, dated, at start and end.
-
-### Writing (only you can)
-
-15. Fill the report's **51 placeholders**.
-16. **§11.6** — each member, two or three sentences, own words.
-17. **§12 contribution table** — what actually happened.
-18. Slide 10's dashboard screenshot; slide 12's cost figure.
-
-### Submission
-
-19. `git init`, commit, push. Record the URL.
-20. Export the diagram as PDF/image; export the report as PDF.
-21. **Record the backup demo video** the day before; store it locally on two laptops.
-
-### Rehearsal
-
-22. **Time a full run-through.** 14 minutes is an estimate.
-23. Each member takes the quiz in `21-team-quiz.md` and answers the Q&A cold.
-24. **Have a teammate deploy from the guide alone** — the only real test of requirement I4.
-
-### Afterwards
-
-25. `terraform destroy`, confirm nothing remains, watch the credit balance for 24 hours.
-
----
-
-## Phase 16 — what this phase produced
-
-| File | What it is |
-|---|---|
-| `docs/requirements/20-final-audit.md` | This document |
-| `docs/learning/21-team-quiz.md` | 32 questions with answers, for the oral exam |
-
-**Verification performed:** every requirement in the brief's §4, §6, §7, §8, §9, §10, §11, §13, §15 and §16 is represented above, each with one of the four status words and a pointer to its evidence. No requirement is marked Complete on the strength of a deployment that has not happened.
+1. **Rotate the AWS access key** that was stored in `CLI-Keys.txt` and in the PowerShell transcript; delete those local copies.
+2. **Commit** the final deck, the speaking script and these corrections; push to `develop`.
+3. Run `terraform import` for the two Cognito groups (commands in `cognito.tf`), then `terraform plan` — expect at most an in-place update of the two groups (description/precedence), and **no destroy or create**.
+4. **Rehearse a PITR restore and time it** (`docs/learning/19-disaster-recovery.md` §5) → fills the RTO.
+5. Decide on note E1 (energy totals).
+6. Export diagram and report as PDF; record the backup demo video; time a rehearsal.
+7. After grading: `terraform destroy`, confirm nothing remains, watch the credit balance for 24 hours.

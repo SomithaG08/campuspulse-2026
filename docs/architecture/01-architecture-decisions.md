@@ -48,7 +48,7 @@ Every decision below is written as: **options considered → what we chose → w
 | | HTTP API (v2) | REST API (v1) |
 |---|---|---|
 | Price | **$1.00 per million** requests | $3.50 per million |
-| Free tier | 1M calls/month, 12 months | 1M calls/month, 12 months |
+| Free tier | 1M calls/month, 12 months (legacy offer — see cost model) | 1M calls/month, 12 months (legacy offer) |
 | Cognito JWT auth | **Built in** (native JWT authorizer) | Needs a Cognito authorizer or a custom Lambda authorizer |
 | CORS | **Built-in setting** | Manual per-method configuration, a classic time sink |
 | API keys / usage plans | Not supported | Supported |
@@ -105,7 +105,9 @@ Every decision below is written as: **options considered → what we chose → w
 
 ---
 
-## AD-5: Four small Lambdas, not one big one
+## AD-5: Four small Lambdas, not one big one — **SUPERSEDED by AD-11 (October 2026)**
+
+> Kept as a record of the original reasoning. After the project review the system runs two functions; see AD-11.
 
 | Function | Routes | IAM permission it gets |
 |---|---|---|
@@ -130,7 +132,9 @@ Every decision below is written as: **options considered → what we chose → w
 
 ---
 
-## AD-7: No VPC
+## AD-7: No VPC — **SUPERSEDED by AD-10 (October 2026)**
+
+> Kept as a record. The review asked for a VPC, and the cost argument below turned out not to apply: a NAT Gateway is needed only for *internet* access, and a DynamoDB gateway endpoint is free. See AD-10.
 
 There is no VPC, no subnet and no security group in this architecture, and that is a decision, not an omission.
 
@@ -164,16 +168,102 @@ The account allows IAM role creation, so Terraform is possible. Terraform gives 
 
 ---
 
+## AD-10: A VPC with private subnets and a free DynamoDB gateway endpoint (October 2026)
+
+**Context.** Project review: "VPC missing". The brief (§7) asks for "a configured cloud networking environment".
+
+**Options**
+| Option | Monthly cost | Verdict |
+|---|---|---|
+| No VPC (AD-7) | $0 | **Rejected** by the review |
+| Lambda in private subnets + NAT Gateway | ~$32 + data | **Rejected** — a third of the budget, and gives the data function internet access it does not need |
+| Lambda in private subnets + interface endpoints (DynamoDB, Cognito, SNS) | ~$8 per endpoint per AZ | **Rejected** — ~$48/month for two AZs |
+| **Lambda in private subnets + DynamoDB *gateway* endpoint** | **$0** | **Chosen** |
+
+**What we built** (`infrastructure/terraform/vpc.tf`): VPC `10.20.0.0/16`; two private `/24` subnets in eu-west-3a and eu-west-3b; one route table with no `0.0.0.0/0` route; no internet gateway, no NAT; a DynamoDB gateway endpoint whose policy allows `PutItem`/`Query` on our table only; a security group with no inbound rules and outbound HTTPS to the DynamoDB prefix list only; the default security group emptied; VPC Flow Logs to CloudWatch (7 days).
+
+**Why it is worth having even though the services are managed.** The data function can now send data to exactly one place — our table — whatever bug or stolen credential is involved. That is a property IAM alone cannot give: IAM limits *what* a function may call, the network limits *where* its packets can go.
+
+**What it costs us.** Lambda in a VPC takes minutes to release its network interfaces on `terraform destroy`. The `auth` function cannot live inside (AD-11). Extending the system to call another AWS service from the `api` function now needs an endpoint for that service.
+
+---
+
+## AD-11: Two Lambda functions, grouped by business requirements and network boundaries (October 2026)
+
+**Context.** Project review: "Group Lambda functions according to business requirements, and VPC is missing". The original version had five nano-functions (`health`, `auth`, `ingest`, `query`, `stats`) split purely by HTTP verb and technical CRUD action on the same data entity. This created function sprawl, duplicate connection overhead, and failed to reflect high-level business capabilities.
+
+We reorganized the compute layer into **two distinct business-capability domains** aligned with our security and networking boundaries:
+
+| Business Domain & Function | Network Boundary | Business Responsibilities & Routes | IAM Scope & Security Guarantee |
+|---|---|---|---|
+| **Public Identity & Access Gateway**<br/>`campuspulse-dev-auth` | **Outside the VPC** | **Identity & Access Management:** User authentication, JWT token minting, role assertion (`admin` vs `student`).<br/>Route: `POST /login` | `cognito-idp:InitiateAuth` on Cognito User Pool.<br/>**Zero database access:** Cannot read, write, or touch campus operational records. |
+| **Protected Campus Operations Platform**<br/>`campuspulse-dev-api` | **Inside the VPC** (2 private subnets across 2 AZs, no internet access) | **Campus Operations & Telemetry:** Ingesting & validating sensor telemetry (`POST /events`), student facility maintenance requests (`POST /requests`, `GET /requests`), campus comfort & energy analytics (`GET /stats`), real-time operational alerts (`GET /alerts`), event auditing (`GET /events`), and system health (`GET /health`). | `dynamodb:PutItem` + `dynamodb:Query` on the events table and indexes via private DynamoDB Gateway Endpoint.<br/>**Zero internet access:** Cannot communicate with the outside internet, preventing data exfiltration. |
+
+**Why this satisfies business requirements:**
+1. **Separation of Concerns:** Authentication and identity management is a distinct public-facing capability with different scaling, lifecycle, and security needs than internal campus operations.
+2. **True Network Isolation:** The function that connects to the public internet (to reach Cognito's public API) has no permission to access campus data. The function that manages campus data is sealed inside a private network with no internet gateway or NAT gateway, reaching DynamoDB exclusively through an internal gateway endpoint.
+3. **Operational Performance:** Co-locating related campus operations within a warm container context eliminates redundant cold starts between telemetry ingestion and operational queries while sharing common validation and configuration logic (`campus_config.py`).
+4. **Least-Privilege Defense in Depth:** While the consolidated `api` function combines read and write permissions, this risk is tightly bounded by three independent controls: (a) physical network isolation in private subnets, (b) the VPC endpoint policy which whitelists our table only, and (c) strict per-route Cognito group authorization checks (`common/auth.py`).
+
+---
+
+## AD-12: Backups in two independent layers (October 2026)
+
+**Context.** Project review: "backup missing". PITR existed, but it is a feature *of the table*; it is not a backup system and it does not survive the table being deleted beyond a short window.
+
+**Chosen:** keep PITR (any second, 35 days, RPO ≈ 5 min) **and** add AWS Backup: a vault, a daily rule (03:00 UTC, kept 7 days) and a weekly rule (Sunday 04:00 UTC, kept 35 days) selecting the events table; S3 versioning on the site bucket (old versions kept 30 days). `scripts/backup-now.sh` takes an on-demand backup; `scripts/restore-drill.sh` restores the latest recovery point into a new table, times it (the measured RTO) and deletes the copy.
+
+**Why AWS Backup rather than DynamoDB on-demand backups by script.** A schedule, retention and a separate vault are configuration, not a cron job someone must remember; it is also the service an operations team would use for more than one resource.
+
+**What it costs us.** Backup storage is billed per GB-month (≈$0.10). Our table is under 10 MB: fractions of a cent. `force_destroy` on the vault lets `terraform destroy` clean up — which also means a destroy deletes the backups; that is right for a course project and wrong for production.
+
+---
+
+## AD-13: Team alerts by email through CloudWatch alarms and SNS (October 2026)
+
+**Context.** Project review: "alerts should be redirected to the team with school mail".
+
+**Options**
+| Option | Verdict |
+|---|---|
+| The `api` function publishes to SNS for each critical event | **Rejected** — needs internet or an SNS interface endpoint (~$8/AZ/month) from inside the VPC, and would email once per event |
+| DynamoDB Streams → a third Lambda → SNS | **Rejected** — reintroduces a function the review asked us to remove |
+| **EMF metric → CloudWatch alarm → SNS topic → email to each team address** | **Chosen** |
+
+**How.** The ingest route emits `AlertsRaised{Severity=critical}` and `UrgentRequests` in its log line (EMF). Two new alarms (`critical-alert`, `urgent-request`, 1-minute period, threshold 1) and all five existing alarms notify the topic `campuspulse-dev-alerts`, which has one email subscription per entry of `alert_emails` — the team's `@epita.fr` addresses (and optionally a Teams channel's email address).
+
+**What it costs us.** An email per alarm *state change*, not per event, and it names the alarm rather than the room; the admin page has the detail. The topic is not KMS-encrypted, because CloudWatch alarms cannot publish to a topic using the AWS-managed SNS key; a customer-managed key would cost $1/month.
+
+---
+
+## AD-14: Two role-specific pages — administrator and student (October 2026)
+
+**Context.** Project review: "required two pages, one for admin, one for student". The original dashboard served two staff roles (`ops`, `staff`) on one page.
+
+**Chosen:** Cognito groups renamed `admin` and `student`; three static pages — `index.html` (sign-in, redirects by role), `admin.html`, `student.html` — sharing `app.js`. A new route `GET /requests` answers per role: an administrator gets every request of a day with who raised it; a student gets only their own, read from a new sparse index (GSI3) keyed on their verified Cognito `sub`.
+
+| | Administrator | Student |
+|---|---|---|
+| Sensor events, alerts | yes | **no (403)** |
+| Statistics (occupancy, temperature, energy) | yes | yes — shown as "free rooms" and "building comfort" |
+| Raise a service request | yes | yes |
+| See service requests | all, with requester | own only, no requester field |
+
+**Why the page guard is not the security.** A student who edits the JavaScript to stay on `admin.html` gets 403 from every admin route. The page decides what is shown; the API decides what is returned.
+
+---
+
 ## Summary of the stack
 
 | Layer | Service | Why it is here in one line |
 |---|---|---|
 | Data source | Python simulator (laptop) | Stands in for campus IoT devices |
 | Edge / API | API Gateway **HTTP API** | Public HTTPS entry point, validates JWTs before our code runs |
-| Identity | Cognito user pool (Essentials) | Users, passwords, tokens, and the `ops`/`staff` groups |
-| Compute | 4 × Lambda (Python) | Runs our logic per request, nothing when idle |
-| Storage | DynamoDB, one table + 2 GSIs | Events, queryable by day, by building, and alerts-only |
-| Dashboard | Static site on S3 | What the operations team looks at |
-| Observability | CloudWatch Logs, metrics, alarms, dashboard | Proof the system works and the way we debug it |
-| Security | IAM roles per function, Cognito groups, HTTPS | Least privilege and enforced roles |
-| Backup / DR | DynamoDB point-in-time recovery | Restore to any second in the retention window |
+| Identity | Cognito user pool (Essentials) | Users, passwords, tokens, and the `admin`/`student` groups |
+| Compute | 2 × Lambda (Python): `api` in the VPC, `auth` outside | Runs our logic per request, nothing when idle |
+| Network | VPC, 2 private subnets, security group, DynamoDB gateway endpoint, flow logs | The data function can reach our table and nothing else |
+| Storage | DynamoDB, one table + 3 GSIs | Events, queryable by day, by building, alerts-only, and requests by student |
+| Pages | Static site on S3: sign-in, admin, student | One page per role |
+| Observability | CloudWatch Logs, metrics, 7 alarms, dashboard; SNS email to the team | Proof the system works, the way we debug it, and alerts in the team's school inbox |
+| Security | IAM roles per function, Cognito groups, HTTPS API, private network | Least privilege, enforced roles, network isolation |
+| Backup / DR | DynamoDB PITR + AWS Backup (daily, weekly) + S3 versioning | Any second for 35 days, plus snapshots that survive the table |

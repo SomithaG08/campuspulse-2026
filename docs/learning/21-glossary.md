@@ -56,7 +56,7 @@ Terms are grouped, not alphabetical, because they make more sense in families. U
 
 ## The services we use
 
-**Lambda** — runs a function when something invokes it; bills per request and per GB-second; nothing while idle. *Ours:* four functions — auth, ingest, query, stats.
+**Lambda** — runs a function when something invokes it; bills per request and per GB-second; nothing while idle. *Ours:* five functions — health, auth, ingest, query, stats.
 
 **Function** — a unit of code with a handler AWS calls: `handler(event, context)`.
 

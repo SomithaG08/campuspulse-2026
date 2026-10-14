@@ -15,12 +15,12 @@ output "dynamodb_table_arn" {
 }
 
 output "cognito_user_pool_id" {
-  description = "Needed by cp-auth and by the API Gateway JWT authorizer."
+  description = "Needed by the auth function and by the API Gateway JWT authorizer."
   value       = aws_cognito_user_pool.main.id
 }
 
 output "cognito_client_id" {
-  description = "Needed by cp-auth, the simulator and the dashboard."
+  description = "Needed by the auth function, the simulator and the dashboard."
   value       = aws_cognito_user_pool_client.api.id
 }
 
@@ -29,14 +29,58 @@ output "cognito_issuer_url" {
   value       = "https://cognito-idp.${var.region}.amazonaws.com/${aws_cognito_user_pool.main.id}"
 }
 
-output "lambda_role_arns" {
-  description = "One role per function - attach in Phase 5."
+output "lambda_functions" {
+  description = "The two functions (was five before the October 2026 consolidation)."
   value = {
-    auth   = aws_iam_role.auth.arn
-    ingest = aws_iam_role.ingest.arn
-    query  = aws_iam_role.query.arn
-    stats  = aws_iam_role.stats.arn
+    api  = aws_lambda_function.api.function_name
+    auth = aws_lambda_function.auth.function_name
   }
+}
+
+output "lambda_role_arns" {
+  value = {
+    api  = aws_iam_role.api.arn
+    auth = aws_iam_role.auth.arn
+  }
+}
+
+output "vpc_id" {
+  value = aws_vpc.main.id
+}
+
+output "private_subnet_ids" {
+  value = aws_subnet.private[*].id
+}
+
+output "dynamodb_endpoint_id" {
+  description = "Gateway endpoint: the api Lambda's only network path, to our table only."
+  value       = aws_vpc_endpoint.dynamodb.id
+}
+
+output "backup_vault_name" {
+  value = aws_backup_vault.main.name
+}
+
+output "backup_role_arn" {
+  description = "Used by scripts/backup-now.sh and scripts/restore-drill.sh."
+  value       = aws_iam_role.backup.arn
+}
+
+output "alerts_topic_arn" {
+  value = aws_sns_topic.alerts.arn
+}
+
+output "alert_recipients" {
+  description = "Each address must confirm the AWS subscription email before alerts arrive."
+  value       = var.alert_emails
+}
+
+output "admin_page_url" {
+  value = "http://${aws_s3_bucket_website_configuration.site.website_endpoint}/admin.html"
+}
+
+output "student_page_url" {
+  value = "http://${aws_s3_bucket_website_configuration.site.website_endpoint}/student.html"
 }
 
 output "site_bucket_name" {
@@ -69,7 +113,10 @@ output "cloudwatch_dashboard_url" {
 
 output "alarm_names" {
   value = [
-    aws_cloudwatch_metric_alarm.ingest_errors.alarm_name,
+    aws_cloudwatch_metric_alarm.api_errors.alarm_name,
+    aws_cloudwatch_metric_alarm.auth_errors.alarm_name,
+    aws_cloudwatch_metric_alarm.critical_alert.alarm_name,
+    aws_cloudwatch_metric_alarm.urgent_request.alarm_name,
     aws_cloudwatch_metric_alarm.api_5xx.alarm_name,
     aws_cloudwatch_metric_alarm.alert_burst.alarm_name,
     aws_cloudwatch_metric_alarm.invocation_ceiling.alarm_name,

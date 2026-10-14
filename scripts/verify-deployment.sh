@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env bash
+#!/usr/bin/env bash
 # ---------------------------------------------------------------------------
 # verify-deployment.sh
 #
@@ -42,23 +42,49 @@ check "table is ACTIVE" "ACTIVE" \
   "$(aws dynamodb describe-table --table-name "$TABLE" --region "$REGION" --query 'Table.TableStatus' --output text 2>/dev/null)"
 check "billing is on-demand (nothing billed while idle)" "PAY_PER_REQUEST" \
   "$(aws dynamodb describe-table --table-name "$TABLE" --region "$REGION" --query 'Table.BillingModeSummary.BillingMode' --output text 2>/dev/null)"
-check "both secondary indexes exist" "2" \
+check "all three secondary indexes exist" "3" \
   "$(aws dynamodb describe-table --table-name "$TABLE" --region "$REGION" --query 'length(Table.GlobalSecondaryIndexes)' --output text 2>/dev/null)"
 check "TTL is enabled (storage stays small)" "ENABLED" \
   "$(aws dynamodb describe-time-to-live --table-name "$TABLE" --region "$REGION" --query 'TimeToLiveDescription.TimeToLiveStatus' --output text 2>/dev/null)"
-check "point-in-time recovery is on (our entire DR story)" "ENABLED" \
+check "point-in-time recovery is on (backup layer 1)" "ENABLED" \
   "$(aws dynamodb describe-continuous-backups --table-name "$TABLE" --region "$REGION" --query 'ContinuousBackupsDescription.PointInTimeRecoveryDescription.PointInTimeRecoveryStatus' --output text 2>/dev/null)"
+
+VAULT=$(terraform -chdir="$TF" output -raw backup_vault_name)
+check "AWS Backup vault exists (backup layer 2)" "$VAULT" \
+  "$(aws backup describe-backup-vault --backup-vault-name "$VAULT" --region "$REGION" --query BackupVaultName --output text 2>/dev/null)"
+PLANS=$(aws backup list-backup-plans --region "$REGION" --query "length(BackupPlansList[?starts_with(BackupPlanName, 'campuspulse')])" --output text 2>/dev/null)
+check "a backup plan protects the table" "1" "${PLANS:-0}"
+check "dashboard bucket keeps old versions (S3 versioning)" "Enabled" \
+  "$(aws s3api get-bucket-versioning --bucket "$BUCKET" --query Status --output text 2>/dev/null)"
+
+echo
+echo "Network"
+VPC=$(terraform -chdir="$TF" output -raw vpc_id)
+check "api function runs inside the CampusPulse VPC" "$VPC" \
+  "$(aws lambda get-function-configuration --function-name campuspulse-dev-api --region "$REGION" --query 'VpcConfig.VpcId' --output text 2>/dev/null)"
+check "api function uses two subnets (two AZs)" "2" \
+  "$(aws lambda get-function-configuration --function-name campuspulse-dev-api --region "$REGION" --query 'length(VpcConfig.SubnetIds)' --output text 2>/dev/null)"
+check "VPC has no internet gateway" "0" \
+  "$(aws ec2 describe-internet-gateways --region "$REGION" --filters Name=attachment.vpc-id,Values="$VPC" --query 'length(InternetGateways)' --output text 2>/dev/null)"
+check "DynamoDB gateway endpoint is available" "available" \
+  "$(aws ec2 describe-vpc-endpoints --region "$REGION" --filters Name=vpc-id,Values="$VPC" Name=service-name,Values="com.amazonaws.$REGION.dynamodb" --query 'VpcEndpoints[0].State' --output text 2>/dev/null | tr 'A-Z' 'a-z')"
+check "VPC flow logs are active" "ACTIVE" \
+  "$(aws ec2 describe-flow-logs --region "$REGION" --filter Name=resource-id,Values="$VPC" --query 'FlowLogs[0].FlowLogStatus' --output text 2>/dev/null)"
 
 echo
 echo "Identity"
-check "both roles exist as Cognito groups" "ops staff" \
-  "$(aws cognito-idp list-groups --user-pool-id "$POOL" --region "$REGION" --query 'sort_by(Groups,&GroupName)[].GroupName' --output text 2>/dev/null | tr '\t' ' ')"
+COGNITO_GROUPS=$(aws cognito-idp list-groups --user-pool-id "$POOL" --region "$REGION" --query 'Groups[].GroupName' --output text 2>/dev/null)
+if [[ "$COGNITO_GROUPS" == *"admin"* && "$COGNITO_GROUPS" == *"student"* ]]; then
+  ok "both roles exist as Cognito groups (admin, student)"
+else
+  bad "both roles exist as Cognito groups" "admin student" "$COGNITO_GROUPS"
+fi
 MFA=$(aws cognito-idp describe-user-pool --user-pool-id "$POOL" --region "$REGION" --query 'UserPool.Policies.PasswordPolicy.MinimumLength' --output text 2>/dev/null)
 check "password minimum length is 12" "12" "$MFA"
 
 echo
 echo "Compute"
-for fn in health auth ingest query stats; do
+for fn in api auth; do
   NAME=$(aws lambda get-function-configuration --function-name "campuspulse-dev-$fn" --region "$REGION" --query 'FunctionName' --output text 2>/dev/null)
   check "function $fn is deployed" "campuspulse-dev-$fn" "${NAME:-missing}"
 done
@@ -68,8 +94,13 @@ echo "Observability and cost"
 BAD_RETENTION=$(aws logs describe-log-groups --log-group-name-prefix /aws/lambda/campuspulse --region "$REGION" \
   --query 'length(logGroups[?retentionInDays==`null`])' --output text 2>/dev/null)
 check "no log group is set to never expire" "0" "${BAD_RETENTION:-?}"
-check "four alarms exist" "4" \
+check "seven alarms exist" "7" \
   "$(aws cloudwatch describe-alarms --alarm-name-prefix campuspulse --region "$REGION" --query 'length(MetricAlarms)' --output text 2>/dev/null)"
+TOPIC=$(terraform -chdir="$TF" output -raw alerts_topic_arn)
+CONFIRMED=$(aws sns list-subscriptions-by-topic --topic-arn "$TOPIC" --region "$REGION" \
+  --query "length(Subscriptions[?SubscriptionArn!='PendingConfirmation'])" --output text 2>/dev/null)
+if [ "${CONFIRMED:-0}" -ge 1 ] 2>/dev/null; then ok "team alert emails confirmed: $CONFIRMED address(es)"
+else bad "at least one team alert email is confirmed" ">=1" "${CONFIRMED:-0} - click the AWS confirmation email (check spam)"; fi
 BUDGETS=$(aws budgets describe-budgets --account-id "$(aws sts get-caller-identity --query Account --output text)" \
   --region us-east-1 --query 'length(Budgets)' --output text 2>/dev/null)
 if [ "${BUDGETS:-0}" -ge 1 ] 2>/dev/null; then ok "a budget alert exists (mandatory, spec section 8)"

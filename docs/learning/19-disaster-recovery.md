@@ -57,7 +57,7 @@ One line, because the hard part is done by the service. The restore creates a **
 |---|---|
 | Terraform in Git | Infrastructure loss — the whole stack is rebuildable from code |
 | Lambda code in Git | Code loss |
-| Cognito users | **Not backed up** — three demo users, recreated by two CLI commands |
+| Cognito users | **Not backed up** — three demo users, each recreated with `admin-create-user`, `admin-set-user-password` and `admin-add-user-to-group` |
 | The dashboard | Rebuilt by `deploy-dashboard.sh` |
 | TTL, 30 days | Keeps the table small, so restores stay fast |
 
@@ -65,7 +65,7 @@ One line, because the hard part is done by the service. The restore creates a **
 
 | | Target | Why |
 |---|---|---|
-| **RPO** | **≈ 0, bounded by PITR's granularity** | PITR restores to any second, so almost nothing is lost. This is a property of the service, not an achievement of ours |
+| **RPO** | **≈ 5 minutes** | PITR restores to any second up to its *latest restorable time*, which AWS documents as typically about five minutes before the present. So the last few minutes of events may be lost. This is a property of the service, not an achievement of ours |
 | **RTO** | **Target: under 60 minutes.** Measured: ___ | Restore time depends on table size; ours is tiny. **The blank is deliberate — it gets filled from a real rehearsal** |
 
 **Do not write an RTO you have not measured.** Phase 12's runbook has the rehearsal: restore the table, time it, record the number. "We measured 18 minutes" is a finding; "our RTO is about 20 minutes" is a guess wearing a number's clothes.
@@ -86,8 +86,17 @@ aws dynamodb describe-table --table-name campuspulse-dev-events-restored \
 # 3. Verify the data is really there
 aws dynamodb scan --table-name campuspulse-dev-events-restored --max-items 5
 
-# 4. Point the functions at it, if this is a real recovery
-#    (change TABLE_NAME in terraform.tfvars and apply)
+# 4. Point the functions at it, if this is a real recovery.
+#    There is NO table-name variable in terraform.tfvars - the name is
+#    derived from project/environment. Two things must change together:
+#      a) TABLE_NAME on cp-ingest, cp-query and cp-stats, e.g.
+#         aws lambda update-function-configuration --function-name campuspulse-dev-ingest \
+#           --environment 'Variables={STAGE=dev,APP_VERSION=0.1.0,TABLE_NAME=campuspulse-dev-events-restored,TTL_DAYS=30,METRIC_NAMESPACE=CampusPulse}'
+#         (repeat for -query and -stats with their own variables)
+#      b) the IAM policies, which are scoped to the ORIGINAL table ARN -
+#         without this every call fails with AccessDenied.
+#    Note: the restored table must also have TTL re-enabled; PITR restores
+#    do not copy TTL settings.
 
 # 5. Clean up the test table so it does not sit there consuming storage
 ```
@@ -112,7 +121,7 @@ Point 3 is the real mitigation, and it costs nothing to do early.
 
 - **No multi-region anything.** A region failure takes us down. We are single-region and we say so.
 - **No automated failover.** Recovery is a human running documented commands.
-- **No Cognito user backup.** Three demo users; recreating them is two commands.
+- **No Cognito user backup.** Three demo users; recreating them is three CLI commands per user.
 - **No tested recovery of the whole stack** — only of the data. Rebuilding the stack is `terraform apply`, which we will have done several times, but a full disaster rehearsal is not in scope.
 
 Listing these is the point. Claiming multi-region DR that does not exist is the single most common way a student report loses credibility, because it takes one question to expose.

@@ -156,14 +156,14 @@ def test_offset_timestamp_normalised_to_utc():
 def test_service_request_requires_message():
     body = json.dumps({"building": "Library-A", "room": "A203", "priority": 3})
     with pytest.raises(ValidationError) as exc:
-        validate_service_request(body, "staff@northbridge.edu", now=NOW)
+        validate_service_request(body, "student@northbridge.edu", now=NOW)
     assert "message" in exc.value.message
 
 
 def test_service_request_records_requester():
     body = json.dumps({"building": "Library-A", "room": "A203",
                        "message": "Projector not working", "priority": 3})
-    result = validate_service_request(body, "staff@northbridge.edu", now=NOW)
-    assert result["requested_by"] == "staff@northbridge.edu"
-    assert result["source"] == "staff-portal"
+    result = validate_service_request(body, "student@northbridge.edu", now=NOW)
+    assert result["requested_by"] == "student@northbridge.edu"
+    assert result["source"] == "student-portal"
     assert result["event_type"] == "service_request"

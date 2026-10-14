@@ -115,4 +115,5 @@ def summarise(items: Iterable[dict], date: str) -> dict:
         "top_energy_building": top_energy,
         "urgent_requests": urgent_requests,
         "campus": cfg.campus_totals(),
+        "layout": cfg.campus_layout(),
     }

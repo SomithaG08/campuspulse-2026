@@ -17,8 +17,11 @@ from typing import Optional
 
 GROUPS_CLAIM = "cognito:groups"
 
-OPS = "ops"
-STAFF = "staff"
+# The two roles. The professor's review (Oct 2026) asked for one page for
+# administrators and one for students, so the Cognito groups are named after
+# the people who use them rather than after an internal team name.
+ADMIN = "admin"
+STUDENT = "student"
 
 
 def get_claims(event: dict) -> dict:
@@ -36,8 +39,8 @@ def get_groups(claims: dict) -> list:
     Cognito groups, normalised.
 
     A wrinkle worth knowing: depending on the path a token takes, this claim
-    arrives either as a real list, or as a string like "[ops staff]" or
-    "ops,staff". Handling one shape and meeting another in production is a
+    arrives either as a real list, or as a string like "[admin student]" or
+    "admin,student". Handling one shape and meeting another in production is a
     genuinely unpleasant afternoon, so we handle all three.
     """
     raw = claims.get(GROUPS_CLAIM)
@@ -52,6 +55,26 @@ def get_groups(claims: dict) -> list:
 
 def get_username(claims: dict) -> str:
     return claims.get("cognito:username") or claims.get("email") or claims.get("sub", "unknown")
+
+
+def get_user_id(claims: dict) -> str:
+    """
+    The stable identity used as a database key: Cognito's `sub`.
+
+    Not the email, which a user can change, and not cognito:username, which in
+    a pool that signs in by email is itself a UUID that differs from `sub` on
+    older pools. `sub` never changes for the life of the account.
+    """
+    return claims.get("sub") or get_username(claims)
+
+
+def get_email(claims: dict) -> str:
+    """Human-readable identity for display in the admin view."""
+    return claims.get("email") or get_username(claims)
+
+
+def has_group(event: dict, group: str) -> bool:
+    return group in get_groups(get_claims(event))
 
 
 def check_group(event: dict, allowed: tuple) -> Optional[str]:

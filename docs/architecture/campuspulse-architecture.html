@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<!--
+  CampusPulse 2026 - architecture diagram (revised 12 Oct 2026 after the review).
+  Rendered to campuspulse-architecture.png / .pdf for the submission and slides.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CampusPulse 2026 Architecture</title>
+<style>
+  :root {
+    --ink: #1b1b1a; --muted: #5c5b56; --line: #3a3a37;
+    --ext: #f3f2ee; --aws: #fbfaf7; --edge: #e8f0fb; --login: #f1ecfb;
+    --vpc: #e9f6ec; --subnet: #d6efdc; --data: #fdf2e3; --cross: #f4f4f2;
+    --accent: #2a78d6; --green: #1f8a3a; --orange: #c46a00; --purple: #6b46c1; --red: #c03636;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #fff; font: 13px/1.35 "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: var(--ink); }
+  #canvas { position: relative; width: 1600px; height: 1060px; }
+  .zone { position: absolute; border: 1.5px dashed #9a9890; border-radius: 12px; }
+  .zone > .zl { position: absolute; top: 6px; left: 12px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .box { position: absolute; background: #fff; border: 1.5px solid var(--line); border-radius: 8px; padding: 8px 10px; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+  .box b { display: block; font-size: 13.5px; margin-bottom: 2px; }
+  .box small { display: block; color: var(--muted); font-size: 11.5px; }
+  .tag { display: inline-block; font-size: 10.5px; font-weight: 700; border-radius: 999px; padding: 1px 7px; margin-top: 4px; border: 1px solid currentColor; }
+  .new { color: var(--green); }
+  h1 { position: absolute; left: 30px; top: 14px; margin: 0; font-size: 22px; }
+  .sub { position: absolute; left: 30px; top: 44px; color: var(--muted); font-size: 13px; }
+  svg { position: absolute; left: 0; top: 0; pointer-events: none; }
+  .n { font: 700 11px "Segoe UI", sans-serif; }
+  .legend { position: absolute; left: 30px; bottom: 14px; font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div id="canvas">
+  <h1>CampusPulse 2026 — Architecture</h1>
+  <div class="sub">NorthBridge University smart campus platform · AWS eu-west-3 (Paris) · revised 12 Oct 2026 after the project review</div>
+
+  <!-- EXTERNAL -->
+  <div class="zone" style="left:20px;top:80px;width:250px;height:900px;background:var(--ext)"><span class="zl">External · untrusted</span></div>
+  <div class="box" style="left:40px;top:120px;width:210px"><b>Campus IoT simulator</b><small>simulator.py · signs in as admin<br>occupancy · temperature · humidity · energy · equipment</small></div>
+  <div class="box" style="left:40px;top:270px;width:210px;border-color:var(--accent)"><b>Administrator</b><small>admin.html — alerts, all student requests, occupancy, energy, events</small><span class="tag new">NEW PAGE</span></div>
+  <div class="box" style="left:40px;top:410px;width:210px;border-color:var(--accent)"><b>Student</b><small>student.html — free rooms, comfort, report a problem, my requests</small><span class="tag new">NEW PAGE</span></div>
+  <div class="box" style="left:40px;top:840px;width:210px;border-color:var(--orange)"><b>Team school inboxes</b><small>4 × @epita.fr (+ optional Teams channel address)</small><span class="tag new">NEW</span></div>
+
+  <!-- AWS -->
+  <div class="zone" style="left:300px;top:80px;width:1280px;height:900px;background:var(--aws);border-style:solid;border-color:#c9c7bf"><span class="zl">AWS cloud · region eu-west-3 (Paris)</span></div>
+
+  <!-- Zone A edge -->
+  <div class="zone" style="left:320px;top:110px;width:1240px;height:120px;background:var(--edge)"><span class="zl">Zone A · public edge</span></div>
+  <div class="box" style="left:340px;top:138px;width:250px"><b>Amazon S3 static site</b><small>index · admin · student pages — no campus data<br>read-only bucket policy · versioning on</small></div>
+  <div class="box" style="left:700px;top:138px;width:420px;border-color:var(--accent)"><b>API Gateway — HTTP API</b><small>HTTPS only · CORS · throttling 20/s (burst 40)<br>JWT authorizer: signature · issuer · audience · expiry → <span style="color:var(--red);font-weight:700">401</span> before any code runs</small></div>
+
+  <!-- Zone B login -->
+  <div class="zone" style="left:320px;top:260px;width:330px;height:270px;background:var(--login)"><span class="zl">Zone B · login (outside the VPC)</span></div>
+  <div class="box" style="left:345px;top:292px;width:280px;border-color:var(--purple)"><b>auth Lambda</b><small>POST /login only<br>IAM: cognito-idp:InitiateAuth — <b style="display:inline">no data access</b></small></div>
+  <div class="box" style="left:345px;top:420px;width:280px"><b>Amazon Cognito user pool</b><small>Essentials tier · email sign-in · 12-char passwords<br>groups: <b style="display:inline">admin</b> · <b style="display:inline">student</b></small><span class="tag new">RENAMED</span></div>
+
+  <!-- Zone C VPC -->
+  <div class="zone" style="left:680px;top:260px;width:880px;height:360px;background:var(--vpc);border-style:solid;border-color:var(--green)"><span class="zl" style="color:var(--green)">Zone C · VPC 10.20.0.0/16 · no internet gateway · no NAT gateway</span><span class="tag new" style="position:absolute;right:12px;top:4px">NEW</span></div>
+  <div class="zone" style="left:705px;top:300px;width:330px;height:190px;background:var(--subnet);border-color:var(--green)"><span class="zl" style="color:var(--green)">Private subnet 10.20.1.0/24 · eu-west-3a</span></div>
+  <div class="zone" style="left:1055px;top:300px;width:330px;height:190px;background:var(--subnet);border-color:var(--green)"><span class="zl" style="color:var(--green)">Private subnet 10.20.2.0/24 · eu-west-3b</span></div>
+  <div class="box" style="left:725px;top:335px;width:290px;border-color:var(--accent)"><b>api Lambda (router)</b><small>ingest · query · stats · requests · health<br>one function for every data route</small><span class="tag new">5 → 2 FUNCTIONS</span></div>
+  <div class="box" style="left:1075px;top:335px;width:290px;border-color:var(--accent)"><b>api Lambda (same function)</b><small>network interface in the second AZ —<br>keeps running if one AZ fails</small></div>
+  <div class="box" style="left:705px;top:510px;width:520px;background:#fff;border-style:dashed;border-color:var(--green)"><b>Security group</b><small>inbound: none · outbound: TCP 443 to the DynamoDB prefix list only · default SG emptied · route table has no 0.0.0.0/0 route</small></div>
+  <div class="box" style="left:1405px;top:335px;width:140px;border-color:var(--green)"><b>DynamoDB gateway endpoint</b><small>free · policy: PutItem / Query on our table only</small></div>
+  <div class="box" style="left:1245px;top:510px;width:140px"><b>VPC Flow Logs</b><small>all traffic → CloudWatch, 7 days</small></div>
+
+  <!-- Zone D data -->
+  <div class="zone" style="left:680px;top:650px;width:880px;height:170px;background:var(--data)"><span class="zl">Zone D · data and backup</span></div>
+  <div class="box" style="left:705px;top:685px;width:470px"><b>Amazon DynamoDB — campuspulse-dev-events</b><small>on-demand · pk DAY#date · GSI1 building · GSI2 alerts (sparse) · <b style="display:inline">GSI3 requests by student (sparse)</b><br>TTL 30 days · point-in-time recovery 35 days (RPO ≈ 5 min)</small></div>
+  <div class="box" style="left:1215px;top:685px;width:330px;border-color:var(--orange)"><b>AWS Backup vault</b><small>daily 03:00 UTC, kept 7 days · weekly, kept 35 days<br>survives the table · restore drill measures RTO</small><span class="tag new">NEW</span></div>
+
+  <!-- cross-cutting -->
+  <div class="zone" style="left:320px;top:560px;width:330px;height:400px;background:var(--cross)"><span class="zl">Cross-cutting</span></div>
+  <div class="box" style="left:345px;top:595px;width:280px"><b>Amazon CloudWatch</b><small>structured logs · 9 EMF metric series · dashboard<br>7 alarms incl. <b style="display:inline">critical-alert</b>, <b style="display:inline">urgent-request</b></small></div>
+  <div class="box" style="left:345px;top:750px;width:280px;border-color:var(--orange)"><b>Amazon SNS topic</b><small>campuspulse-dev-alerts → email per team address<br>one email per alarm state change</small><span class="tag new">NEW</span></div>
+  <div class="box" style="left:345px;top:872px;width:280px"><b>AWS IAM</b><small>api role · auth role · backup role · flow-log role<br>no Scan · no Delete · no Action:"*"</small></div>
+  <div class="box" style="left:705px;top:850px;width:470px"><b>AWS Budgets</b><small>$10/month · alerts at 50 %, 80 %, forecast 100 % · credits excluded</small></div>
+  <div class="box" style="left:1215px;top:850px;width:330px"><b>Terraform</b><small>everything above is code · moved.tf migrates the live stack in place</small></div>
+
+  <svg width="1600" height="1060" viewBox="0 0 1600 1060">
+    <defs>
+      <marker id="a" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#3a3a37"/></marker>
+      <marker id="ab" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#2a78d6"/></marker>
+      <marker id="ag" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#1f8a3a"/></marker>
+      <marker id="ao" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#c46a00"/></marker>
+    </defs>
+    <!-- 0 browsers load pages from S3 -->
+    <path d="M252,290 C300,280 320,230 360,205" fill="none" stroke="#3a3a37" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#a)"/>
+    <text x="318" y="262" class="n" fill="#3a3a37">0 pages</text>
+    <!-- 1 simulator + browsers to API GW, routed through the gaps -->
+    <path d="M252,140 L300,140 L300,124 L680,124 L705,150" fill="none" stroke="#2a78d6" stroke-width="2" marker-end="url(#ab)"/>
+    <path d="M252,330 L282,330 L282,244 L775,244 L775,220" fill="none" stroke="#2a78d6" stroke-width="2" marker-end="url(#ab)"/>
+    <path d="M252,470 L290,470 L290,244" fill="none" stroke="#2a78d6" stroke-width="2"/>
+    <text x="500" y="119" class="n" fill="#2a78d6">1 HTTPS + JWT (simulator)</text>
+    <text x="420" y="240" class="n" fill="#2a78d6">1 HTTPS + JWT (admin and student pages)</text>
+    <!-- 3a login -->
+    <path d="M730,220 L730,252 L560,252 L560,290" fill="none" stroke="#6b46c1" stroke-width="2" marker-end="url(#a)"/>
+    <text x="568" y="276" class="n" fill="#6b46c1">3a /login</text>
+    <!-- 4 auth -> cognito -->
+    <path d="M485,375 L485,418" fill="none" stroke="#3a3a37" stroke-width="1.6" marker-end="url(#a)"/>
+    <text x="492" y="402" class="n">4 InitiateAuth</text>
+    <!-- 3b api -->
+    <path d="M880,220 L880,333" fill="none" stroke="#2a78d6" stroke-width="2" marker-end="url(#ab)"/>
+    <path d="M1050,220 L1050,250 L1220,250 L1220,333" fill="none" stroke="#2a78d6" stroke-width="2" marker-end="url(#ab)"/>
+    <text x="1062" y="245" class="n" fill="#2a78d6">3b every other route</text>
+    <!-- 5 to endpoint, then table -->
+    <path d="M1367,375 L1403,375" fill="none" stroke="#1f8a3a" stroke-width="2.2" marker-end="url(#ag)"/>
+    <path d="M1475,440 L1475,636 L940,636 L940,683" fill="none" stroke="#1f8a3a" stroke-width="2.2" marker-end="url(#ag)"/>
+    <text x="1483" y="560" class="n" fill="#1f8a3a">5</text>
+    <text x="1000" y="632" class="n" fill="#1f8a3a">5 PutItem / Query — our table only</text>
+    <!-- 6 backup -->
+    <path d="M1177,735 L1213,735" fill="none" stroke="#c46a00" stroke-width="2" marker-end="url(#ao)"/>
+    <text x="1189" y="727" class="n" fill="#c46a00">6</text>
+    <!-- 7 logs to CloudWatch -->
+    <path d="M725,420 C680,470 670,560 627,640" fill="none" stroke="#3a3a37" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#a)"/>
+    <text x="690" y="607" class="n">7 logs + metrics</text>
+    <!-- 7 alarm -> SNS -->
+    <path d="M485,718 L485,748" fill="none" stroke="#c46a00" stroke-width="2" marker-end="url(#ao)"/>
+    <text x="495" y="738" class="n" fill="#c46a00">alarm</text>
+    <!-- 8 SNS -> inboxes -->
+    <path d="M345,810 C300,830 285,860 252,872" fill="none" stroke="#c46a00" stroke-width="2.2" marker-end="url(#ao)"/>
+    <text x="276" y="830" class="n" fill="#c46a00">8 email</text>
+  </svg>
+
+  <div class="legend">Blue: requests over HTTPS · Green: the data function's only network path · Orange: backup and alerting · Dashed: page download and logs · "NEW" marks changes from the project review (VPC, backups, team email alerts, admin/student pages, 5 → 2 Lambda functions)</div>
+</div>
+</body>
+</html>

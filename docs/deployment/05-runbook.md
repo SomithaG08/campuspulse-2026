@@ -1,5 +1,7 @@
 # Deployment Runbook — empty account to working demo
 
+> **Upgrading the 5 October deployment?** Follow `06-apply-corrections.md` instead — it migrates the live stack to the corrected design (VPC, backups, team email alerts, admin/student pages, two Lambdas).
+
 One ordered sequence. Roughly **90 minutes** the first time, 10 the second.
 
 Do it **in this order**. Each step has a checkpoint; if a checkpoint fails, stop and fix it — later steps assume it passed.
@@ -16,7 +18,7 @@ Do it **in this order**. Each step has a checkpoint; if a checkpoint fails, stop
 | Create the `campuspulse-deploy` IAM user, configure credentials | `aws sts get-caller-identity` shows your account |
 | **Record the account's plan and creation date** in `docs/evidence/cost/` | You know whether the six-month free-plan clock threatens your presentation date |
 | Decide who owns the Terraform state. **One person.** | Everyone else knows not to run `apply` |
-| `cp terraform.tfvars.example terraform.tfvars`, set `notification_email` | The file exists and is gitignored |
+| `cp terraform.tfvars.example terraform.tfvars`, set `notification_email` **and `alert_emails`** (the team's `@epita.fr` addresses) | The file exists and is gitignored |
 
 **Stop condition:** if `aws sts get-caller-identity` fails, nothing else will work.
 
@@ -30,7 +32,7 @@ terraform fmt -check && terraform init && terraform validate   # ← first time 
 terraform plan -out=tfplan
 ```
 
-**Read the plan.** Three things: about 61 resources to add; no `nat_gateway`, `instance`, `db_instance` or `load_balancer` anywhere; every ARN says `eu-west-3`.
+**Read the plan.** Three things: about 75 resources to add (including the VPC, the backup plan and the SNS topic); no `nat_gateway`, `instance`, `db_instance` or `load_balancer` anywhere; every ARN says `eu-west-3`.
 
 ```bash
 terraform apply tfplan
@@ -59,7 +61,7 @@ Three users, created by CLI because a password in a `.tf` file is a password in 
 ```bash
 POOL=$(terraform output -raw cognito_user_pool_id)
 
-for u in "ops@northbridge.edu:ops" "staff@northbridge.edu:staff" "device@campuspulse.local:ops"; do
+for u in "admin@northbridge.edu:admin" "student@northbridge.edu:student" "device@campuspulse.local:admin"; do
   USER="${u%%:*}"; GROUP="${u##*:}"
   aws cognito-idp admin-create-user --user-pool-id $POOL --username "$USER" \
     --message-action SUPPRESS \
@@ -72,6 +74,8 @@ done
 
 **Checkpoint:** `aws cognito-idp list-users --user-pool-id $POOL --query 'Users[].[Username,UserStatus]' --output table` — three users, all `CONFIRMED`.
 
+**And confirm the alert emails:** every address in `alert_emails` has received "AWS Notification - Subscription Confirmation". Each person clicks *Confirm subscription* (check spam/quarantine — school mail often holds it).
+
 Passwords need 12+ characters with upper, lower, number and symbol. Put them wherever the team keeps shared secrets — **never in the repo, a slide, or a screenshot.**
 
 ---
@@ -82,7 +86,7 @@ Passwords need 12+ characters with upper, lower, number and symbol. Put them whe
 bash scripts/verify-deployment.sh
 ```
 
-Twenty-odd checks: table active and on-demand, both indexes, TTL on, **PITR on**, both groups, all five functions, no log group set to never expire, four alarms, a budget, and — importantly — **no EC2, no RDS, no NAT Gateway running**.
+About thirty checks: table active and on-demand, three indexes, TTL on, **PITR on**, **backup vault and plan**, **S3 versioning**, **the `api` function inside the VPC in two subnets, no internet gateway, the DynamoDB endpoint available, flow logs active**, both groups, both functions, no log group set to never expire, seven alarms, confirmed team email subscriptions, a budget — and **no EC2, no RDS, no NAT Gateway running**.
 
 📸 **Screenshot this output.** It is the cheapest and most convincing evidence in the project: every line corresponds to a claim the report makes.
 
@@ -96,7 +100,7 @@ Twenty-odd checks: table active and on-demand, both indexes, TTL on, **PITR on**
 bash scripts/deploy-dashboard.sh
 ```
 
-**Checkpoint:** open the URL it prints. You should see the sign-in form, not an error about `config.js`.
+**Checkpoint:** open the sign-in URL it prints. Sign in as the admin user → you land on `admin.html`; sign out, sign in as the student → you land on `student.html`.
 
 ---
 
@@ -104,13 +108,13 @@ bash scripts/deploy-dashboard.sh
 
 ```bash
 export CAMPUSPULSE_API=$(terraform -chdir=infrastructure/terraform output -raw api_endpoint)
-export OPS_USER=ops@northbridge.edu     OPS_PASSWORD='...'
-export STAFF_USER=staff@northbridge.edu STAFF_PASSWORD='...'
+export ADMIN_USER=admin@northbridge.edu     ADMIN_PASSWORD='...'
+export STUDENT_USER=student@northbridge.edu STUDENT_PASSWORD='...'
 
 python tests/api/run_api_tests.py
 ```
 
-**Checkpoint: 45 passed, 0 failed**, and `docs/evidence/api-test-results.json` is overwritten with a real run. **Commit that file.**
+**Checkpoint: 50 passed, 0 failed**, and `docs/evidence/api-test-results.json` is overwritten with a real run. **Commit that file.**
 
 Then the human-visible path:
 
@@ -119,7 +123,7 @@ export CAMPUSPULSE_USER=device@campuspulse.local
 export CAMPUSPULSE_PASSWORD='...'
 
 python simulator/simulator.py -n 60 --interval 2      # watch the dashboard fill
-python simulator/simulator.py --force-alert -n 3      # watch a red alert appear
+python simulator/simulator.py --force-alert -n 3      # watch a red alert appear - and the team's alert email arrive
 ```
 
 📸 Dashboard with data · 📸 a red alert · 📸 the DynamoDB item · 📸 the CloudWatch log line for that `request_id`.
@@ -144,15 +148,13 @@ aws cloudwatch describe-alarms --alarm-names campuspulse-dev-alert-burst \
 **Rehearse the restore — this is the DR requirement, and it must actually happen:**
 
 ```bash
-aws dynamodb restore-table-to-point-in-time \
-  --source-table-name campuspulse-dev-events \
-  --target-table-name campuspulse-dev-events-restoretest \
-  --use-latest-restorable-time
+bash scripts/backup-now.sh        # on-demand AWS Backup recovery point (or wait for 03:00 UTC)
+bash scripts/restore-drill.sh     # restores it into a new table, prints the elapsed time, deletes the copy
 ```
 
-Time it. Note the number — **that is your measured RTO**, not a guess. Then delete the restored table so it does not sit there consuming storage.
+The time it prints is **your measured RTO**, not a guess. Put it in the report (§9.2).
 
-📸 the restore in progress · 📸 the restored table · note the elapsed minutes.
+📸 the recovery point in the AWS Backup vault · 📸 the drill output · 📸 a received alert email.
 
 **Record the cost:** 📸 the credit balance, with the date.
 

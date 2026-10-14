@@ -11,34 +11,36 @@ Rehearse these **cold** — a teammate asks, you answer without notes. The weake
 **Why serverless rather than containers or EC2?**
 Our workload is bursty and idle most of the time. A VM bills every hour regardless; Lambda bills per request and costs nothing idle. We have a hundred non-renewable credits. It also removed OS patching, web-server configuration and NAT Gateway cost entirely. The trade-off is cold starts of one to three seconds and a design that would not lift to another cloud unchanged.
 
-**Why no VPC?**
-Because nothing of ours listens on a network. Lambda, API Gateway, DynamoDB and Cognito are managed services — there is no server in a subnet, so there is no subnet to configure. Our boundary is IAM plus the token check. A private-subnet design would need a NAT Gateway at about thirty-two dollars a month, a third of our budget, for something that does nothing for us. If we later ran a database speaking a network protocol, a VPC would become the right answer.
+**How does your VPC work, and why does it cost $0?**
+We built a custom VPC (`10.20.0.0/16`) with two private subnets across Availability Zones eu-west-3a and eu-west-3b. It has **no internet gateway and no NAT Gateway**. Our data Lambda (`api`) runs inside these subnets and communicates with DynamoDB through a free **DynamoDB Gateway Endpoint** with a route table entry and a policy restricted to our table. A NAT Gateway would cost ~$32/month; our gateway endpoint gives full private network isolation at **$0/month**.
+
+**Why two Lambdas grouped by business domain rather than five nano-functions or one monolith?**
+Our compute layer is grouped strictly by business requirements and network boundaries:
+1. `campuspulse-dev-auth` handles the **Public Identity & Access Gateway** (`POST /login`). It runs outside the VPC to reach Cognito's public endpoint directly without NAT cost, and holds **zero database permissions**.
+2. `campuspulse-dev-api` handles the **Protected Campus Operations & Telemetry Platform** (`/events`, `/requests`, `/alerts`, `/stats`, `/health`). It is sealed inside the private VPC with zero internet access, preventing any data exfiltration.
+Grouping by business domain eliminates the function sprawl and cold starts of five separate CRUD nano-functions, while avoiding a single unsegmented monolith.
 
 **What happens if a Lambda fails?**
-The caller gets a 500 with a request identifier, and the detail goes to CloudWatch. Lambda retries asynchronous invocations automatically, but ours are synchronous through API Gateway, so the client decides whether to retry. An error alarm fires. Nothing is lost that was already written — DynamoDB writes are atomic.
-
-**Why four Lambdas rather than one?**
-So each gets its own permissions. The internet-facing function can write to one table and cannot read anything. The read functions cannot write. One function with one broad role would turn any bug into a full data breach.
+The caller gets a 500 with a request identifier, and the detail goes to CloudWatch. Lambda retries asynchronous invocations automatically, but ours are synchronous through API Gateway, so the client decides whether to retry. An error alarm fires and emails our team via SNS. Nothing is lost that was already written — DynamoDB writes are atomic.
 
 **Why DynamoDB and not a relational database?**
-Our access patterns are known and fixed — recent events, events by building, today's alerts. DynamoDB answers those in one query each and costs nothing while idle. RDS bills hourly and needs a VPC. If the campus wanted arbitrary analytical queries, a relational store or an S3 data lake with Athena would be the right answer, and we would say so.
+Our access patterns are known and fixed — recent events, events by building, today's alerts, student requests. DynamoDB answers those in one query each and costs nothing while idle. RDS bills hourly and needs a VPC NAT or private connections. If the campus wanted arbitrary analytical queries, a relational store or an S3 data lake with Athena would be the right answer, and we would say so.
 
 ---
 
 ## Security
 
 **How is the API protected?**
-Three layers. API Gateway validates the token's signature, issuer, audience and expiry before our code runs — that is the 401. The function checks the caller's group — that is the 403. IAM limits what the function can touch at all. Plus HTTPS throughout, input validation on every field, and throttling.
+Three layers. API Gateway validates the token's signature, issuer, audience and expiry before our code runs — that is the 401. The function checks the caller's group (`admin` or `student`) — that is the 403. IAM limits what the function can touch at all, backed by our VPC security group and endpoint policy. Plus HTTPS on every API call, input validation on every field, and throttling.
 
 **What stops someone sending fake events?**
-They need a valid token from our Cognito pool, in the `ops` group. And even then, every field is validated and the severity they claim is discarded — we compute it ourselves. The most an authorised attacker could do is insert plausible but false readings, which is an authentication problem rather than an API one.
+They need a valid token from our Cognito pool in the `admin` group. And even then, every field is validated and the severity they claim is discarded — we compute it ourselves. Students get a 403 if they attempt to post sensor events.
 
 **Where are your AWS credentials?**
 Nowhere. Each function assumes an IAM role at invocation and receives temporary, automatically rotated credentials. There is no key in the code or the repository to leak.
 
 **Is least privilege real here, or just claimed?**
-Real, and audited. We listed every AWS call the code makes and compared it with every permission granted — exact match. You can verify it with `iam simulate-principal-policy`: for the ingest function, `PutItem` is allowed, `Query` and `Scan` are implicitly denied.
-*Then add, unprompted:* the human deployment identity is broad, near-administrator, for convenience. That is a different thing and our report says so.
+Real, and audited. `auth` holds only `cognito-idp:InitiateAuth` and cannot touch data. `api` can only perform `PutItem` and `Query` on our specific table and indexes — no `Scan` and no `Delete`. Furthermore, because `api` is inside a private VPC with no internet route, even if code was injected, it cannot transmit data outside AWS.
 
 **Why is the S3 bucket public?**
 It contains the page — HTML, CSS, JavaScript — and no campus data. Every value shown comes from the API, which refuses without a token. The policy allows reading objects only: nobody can list, write or delete.

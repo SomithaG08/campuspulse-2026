@@ -170,7 +170,7 @@ def validate_event(raw_body: Any, now: datetime = None) -> dict:
 
 def validate_service_request(raw_body: Any, username: str, now: datetime = None) -> dict:
     """
-    POST /requests - the staff-facing endpoint.
+    POST /requests - the student-facing endpoint (administrators may use it too).
 
     A service request becomes an ordinary event with event_type
     'service_request', so it flows through exactly the same pipeline as a
@@ -198,6 +198,6 @@ def validate_service_request(raw_body: Any, username: str, now: datetime = None)
         raise ValidationError("message is required for a service request")
 
     event = validate_event(synthetic, now=now)
-    event["source"] = "staff-portal"
+    event["source"] = "student-portal"
     event["requested_by"] = username
     return event

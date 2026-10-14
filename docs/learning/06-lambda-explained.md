@@ -25,7 +25,7 @@ def handler(event, context):
 - **`context`** — information about this invocation. We use `context.aws_request_id`, the ID that ties the response, the log line and the access log together.
 - **The return value** — for an HTTP API with payload format 2.0, a dict with `statusCode`, `headers` and a string `body`.
 
-## 3. Our four functions
+## 3. Our five functions
 
 | Function | Route | IAM permission | Why separate |
 |---|---|---|---|
@@ -110,7 +110,7 @@ That is not an accident; it is why those modules are separate from the handlers.
 ## Can you explain this?
 
 1. What is a cold start, and why are our boto3 clients created outside the handler?
-2. Why four functions instead of one, in terms of what an attacker gets?
+2. Why five functions instead of one, in terms of what an attacker gets?
 3. The client sends `"severity": "normal"` with an event that is clearly abnormal. What happens, and why?
 4. Where do the table name and the Cognito client ID come from?
 5. Why do our 500 responses not include the exception message?

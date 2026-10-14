@@ -17,6 +17,11 @@ resource "aws_s3_bucket" "site" {
   # Bucket names are globally unique across all of AWS, so a suffix is needed.
   bucket = "${local.name}-site-${random_id.bucket_suffix.hex}"
 
+  # Versioning (below) keeps old object versions, which `aws s3 rm` does not
+  # remove. force_destroy lets `terraform destroy` empty the bucket, every
+  # version included, so cleanup cannot be blocked by our own backups.
+  force_destroy = true
+
   tags = {
     Name    = "${local.name}-site"
     Content = "static-assets-only-no-data"
@@ -70,4 +75,34 @@ resource "aws_s3_bucket_policy" "site" {
   policy = data.aws_iam_policy_document.site_public_read.json
 
   depends_on = [aws_s3_bucket_public_access_block.site]
+}
+
+# ---------------------------------------------------------------------------
+# Backup of the dashboard files (professor's review, October 2026).
+# Every upload keeps the previous version, so a bad deploy is undone by
+# restoring the previous version of index.html / app.js. Old versions expire
+# after 30 days so the bucket cannot grow without bound. Cost: the files are
+# a few tens of KB - effectively zero.
+# ---------------------------------------------------------------------------
+resource "aws_s3_bucket_versioning" "site" {
+  bucket = aws_s3_bucket.site.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "site" {
+  bucket = aws_s3_bucket.site.id
+
+  rule {
+    id     = "expire-old-versions"
+    status = "Enabled"
+    filter {}
+
+    noncurrent_version_expiration {
+      noncurrent_days = 30
+    }
+  }
+
+  depends_on = [aws_s3_bucket_versioning.site]
 }

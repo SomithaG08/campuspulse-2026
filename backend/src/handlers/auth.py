@@ -14,6 +14,15 @@ in this project.
 
 IAM: this function's role allows cognito-idp:InitiateAuth on our user pool and
 nothing else. It cannot read the database. It cannot list users.
+
+WHY THIS IS STILL A SEPARATE LAMBDA AFTER THE CONSOLIDATION
+-----------------------------------------------------------
+Everything else now runs in one function inside private subnets with no route
+to the internet (vpc.tf). Cognito's API is a public AWS endpoint, so reaching
+it from inside the VPC would need a NAT Gateway (~$35/month) or an interface
+endpoint (~$8/month per AZ). Keeping login in its own small function outside
+the VPC costs nothing and keeps the data function fully isolated: the one
+function that can reach the internet holds no database permission at all.
 """
 
 import base64
@@ -50,7 +59,11 @@ def _role_from_id_token(id_token: str) -> str:
         groups = claims.get("cognito:groups") or []
         if isinstance(groups, str):
             groups = groups.strip("[]").replace(",", " ").split()
-        return groups[0] if groups else "none"
+        if not groups:
+            return "none"
+        # A user in both groups is shown the administrator page. Group order
+        # inside the token is not guaranteed, so pick by name, not by index.
+        return "admin" if "admin" in groups else groups[0]
     except Exception:  # noqa: BLE001 - a malformed token must not break login
         return "unknown"
 

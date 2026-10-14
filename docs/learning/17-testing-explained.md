@@ -76,7 +76,7 @@ Ordinary tests check a function. These check a **property of the whole system**,
 
 Every test in the report is labelled **Executed**, **Created not executed**, or **Not created**. No exceptions, no softening.
 
-Right now: unit tests **Executed, 131 passed**. API tests **Created, not executed** — nothing is deployed.
+Right now: unit tests **Executed, 131 passed**. API tests **Executed against the live deployment on 5 October 2026, 45 passed** (`docs/evidence/api-test-results.json`).
 
 They *were* run once against a throwaway local stand-in built on the project's real logic modules, and all 45 passed. That proves the **test suite is correct**; it proves **nothing about AWS**. Both halves of that sentence belong in the report, because a claim with its limits stated is believed, and a claim without them invites the examiner to find the limits for you.
 
@@ -107,4 +107,4 @@ python tests/api/run_api_tests.py                     # needs a deployment
 2. Because validation, rules, key building, queries and aggregation import no boto3 and touch no network. The AWS-facing handlers are kept thin on purpose, so the interesting logic stays testable on a laptop.
 3. Because that is where the bugs are. Nobody gets 10 wrong; people get "greater than" versus "greater than or equal" wrong exactly at the boundary.
 4. The first enforces that no query can degrade into a full-table `Scan`. The second guarantees the simulator can never produce an event the API rejects — so it can never be the reason a live demo errors.
-5. Against AWS, no — nothing is deployed. Against a local stand-in built on the project's real logic modules, yes: 45 passed, 0 failed. That shows the suite itself is correct and says nothing about IAM, Cognito, API Gateway or DynamoDB.
+5. Yes. First against a local stand-in (which proved the suite itself is correct), then against the live AWS deployment on 5 October 2026: 45 passed, 0 failed. Only the live run says anything about IAM, Cognito, API Gateway and DynamoDB.

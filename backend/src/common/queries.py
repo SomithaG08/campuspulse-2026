@@ -22,6 +22,7 @@ from common.validation import ValidationError
 TABLE_INDEX = None  # the table itself has no index name
 BUILDING_INDEX = "gsi1-by-building"
 ALERT_INDEX = "gsi2-alerts"
+REQUESTER_INDEX = "gsi3-by-requester"
 
 DEFAULT_LIMIT = 50
 MAX_LIMIT = 200
@@ -150,4 +151,40 @@ def day_events_for_stats(date: str, building: Optional[str] = None,
     handler pages through up to MAX_STATS_PAGES of these.
     """
     args = recent_events(date, limit=MAX_LIMIT, building=building, token=token)
+    return args
+
+
+def my_requests(requester_id: str, limit: int = DEFAULT_LIMIT,
+                token: Optional[dict] = None) -> dict:
+    """
+    Access pattern 5 - a student's own service requests, newest first.
+
+    The partition key is built from the caller's verified Cognito `sub`, never
+    from a query-string parameter, so there is no way to ask for someone
+    else's requests: the key simply cannot be pointed at another user.
+    """
+    if not requester_id:
+        raise ValidationError("no user identity on this request")
+    args = _base(limit, token)
+    args["IndexName"] = REQUESTER_INDEX
+    args["KeyConditionExpression"] = "gsi3pk = :pk"
+    args["ExpressionAttributeValues"] = {":pk": keys.requester_partition(requester_id)}
+    return args
+
+
+def day_requests(date: str, token: Optional[dict] = None) -> dict:
+    """
+    Access pattern 6 - every service request of one day (administrator view).
+
+    Reads the day partition with a FilterExpression on event_type, one page of
+    MAX_LIMIT items at a time; the handler pages through up to MAX_STATS_PAGES
+    pages, exactly like /stats. Filtering after reading is normally the wrong
+    design and we use it knowingly: a day is a few hundred items, so this is
+    one or two pages. DynamoDB's Limit applies BEFORE the filter, which is why
+    the handler must page rather than trust one page to hold every request.
+    The scaling fix is a sparse index keyed REQ#<date>; documented, not built.
+    """
+    args = recent_events(date, limit=MAX_LIMIT, token=token)
+    args["FilterExpression"] = "event_type = :sr"
+    args["ExpressionAttributeValues"][":sr"] = "service_request"
     return args

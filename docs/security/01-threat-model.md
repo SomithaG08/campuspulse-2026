@@ -22,7 +22,8 @@ Everything below is **Not verified against a live deployment** — nothing has b
 | Every data route requires a JWT; API Gateway's authorizer validates signature, issuer, audience and expiry **before our code runs** | Configured | `apigateway.tf` — `aws_apigatewayv2_authorizer.cognito` |
 | The authorizer accepts only tokens from our pool, for our client | Configured | `jwt_configuration.issuer`, `.audience` |
 | Tokens expire after 60 minutes | Configured | `cognito.tf` — `id_token_validity` |
-| HTTPS only; there is no HTTP listener to downgrade to | Configured | API Gateway has no plaintext endpoint |
+| API is HTTPS only; there is no HTTP listener to downgrade to | Configured | API Gateway has no plaintext endpoint |
+| **Gap:** the dashboard page itself is served over HTTP (S3 website endpoints do not support HTTPS), so its JavaScript could be tampered with on a hostile network before the user types a password | Accepted risk — fix is CloudFront with HTTPS in front of a private bucket | Future improvement |
 
 **Residual risk:** a stolen, unexpired token works until it expires. Mitigation would be shorter lifetimes or revocation on sign-out — **Planned**, not built. Worth saying plainly: an hour is a deliberate trade-off against usability, not an oversight.
 
@@ -126,9 +127,33 @@ Audited this phase by listing every AWS call in the code and comparing it with e
 
 ---
 
-## The security model in three sentences
+## T8 · Data exfiltration from a compromised function *(added October 2026)*
 
-Data crosses a trust boundary in exactly three places, and each has its own control: **API Gateway's JWT authorizer** decides whether we know who you are (401), **the Lambda's group check** decides whether your role permits this route (403), and **IAM** decides whether that function may touch that resource at all (`AccessDenied`). The three are independent — defeating one leaves the other two standing. Every member of the team should be able to name all three in order.
+**What an attacker tries:** having found a bug in the data function, make it send data somewhere other than back to the caller — to the internet, or to a DynamoDB table in another account.
+
+| Control | Status | Where |
+|---|---|---|
+| `api` Lambda in **private subnets** with no internet gateway, no NAT, no default route | Configured | `vpc.tf` |
+| Security group: **no inbound rules**; outbound only TCP 443 to the DynamoDB prefix list | Configured | `vpc.tf` |
+| DynamoDB gateway endpoint policy: `PutItem`/`Query` on **our table only** | Configured | `vpc.tf` |
+| VPC Flow Logs record every accepted and rejected connection | Configured | `vpc.tf` |
+| The one function outside the VPC (`auth`) has **no data permission** | Configured | `iam.tf` |
+
+**Trade-off accepted (AD-11):** the consolidated `api` role can both read and write the table; before October 2026 the ingest function could only write. The network controls above bound what that role can do with what it reads.
+
+## T9 · One student reading another student's requests *(added October 2026)*
+
+| Control | Status | Where |
+|---|---|---|
+| `GET /requests` for a student queries GSI3 with `USER#<sub>`, where `sub` comes from the **verified token** — no parameter can change it | Implemented | `handlers/requests.py`, `queries.my_requests`; unit test `test_student_lists_only_their_own_requests` |
+| The student response omits `requested_by` | Implemented | `handlers/requests.py`; API test T8.2 |
+| Students receive 403 on `GET /events` and `GET /alerts` | Implemented | role matrix, `test_api_router.py`; API tests T3.4-T3.5 |
+
+**Residual risk, accepted:** the alert SNS topic is not KMS-encrypted (CloudWatch alarms cannot publish with the AWS-managed SNS key; a customer-managed key costs $1/month). Its messages hold alarm names and thresholds, not personal data.
+
+## The security model in four sentences
+
+Data crosses a trust boundary in four places, and each has its own control: **API Gateway's JWT authorizer** decides whether we know who you are (401), **the route's group check** decides whether your role — `admin` or `student` — permits this route (403), **IAM** decides whether that function may touch that resource at all (`AccessDenied`), and **the network** decides where the data function can send anything (only our table, through the endpoint). The four are independent — defeating one leaves the others standing.
 
 ## What we are not claiming
 
@@ -137,6 +162,6 @@ Data crosses a trust boundary in exactly three places, and each has its own cont
 - No multi-region anything.
 - No token revocation before expiry.
 - No automated secret rotation (there are no secrets to rotate).
-- `terraform validate` has not been run; nothing has been deployed.
+- The October 2026 Terraform changes (VPC, backup, SNS) must be validated with `terraform validate`/`plan` and deployed; the 5 October deployment predates them.
 
 Listing these is deliberate. A threat model that claims complete coverage is the least credible document a team can submit.

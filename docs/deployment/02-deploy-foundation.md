@@ -1,6 +1,8 @@
 # Deploying the Foundation (Phase 4)
 
-What this creates: the budget alert, the DynamoDB table, the Cognito user pool and its two groups, four IAM roles, the S3 site bucket, and four CloudWatch log groups.
+What this creates: the budget alert, the DynamoDB table, the Cognito user pool and its two groups (`aws_cognito_user_group.ops` / `.staff`), five IAM roles (one per Lambda), the S3 site bucket, and five CloudWatch log groups.
+
+> **Existing deployment (created the groups with the CLI before Oct 2026)?** Import them once so Terraform does not try to create them again: `terraform import aws_cognito_user_group.ops <pool-id>/ops` and `terraform import aws_cognito_user_group.staff <pool-id>/staff`.
 
 What it does **not** create: Lambda functions and the API. Those arrive in Phase 5, when the code they run exists.
 

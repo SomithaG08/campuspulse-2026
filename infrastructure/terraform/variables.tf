@@ -44,7 +44,7 @@ variable "log_retention_days" {
 }
 
 variable "ttl_days" {
-  description = "Days an event lives before DynamoDB deletes it. Passed to the Lambdas as an environment variable in Phase 5; must match TTL_DAYS in backend/src/common/campus_config.py."
+  description = "Days an event lives before DynamoDB deletes it. Passed to cp-ingest as TTL_DAYS and read by common/campus_config.py (default 30)."
   type        = number
   default     = 30
 }
@@ -84,10 +84,14 @@ variable "throttle_burst_limit" {
   default     = 40
 }
 
-variable "alarm_email" {
-  description = "Optional. If set, alarms also send email through SNS. Leave empty and alarms only change state in the console, which is enough for the demo."
-  type        = string
-  default     = ""
+variable "alert_emails" {
+  description = "Team school addresses (@epita.fr) that receive every alarm and campus alert by email. A Microsoft Teams channel email address can be added too. Each address must click the AWS confirmation email once."
+  type        = list(string)
+
+  validation {
+    condition     = length(var.alert_emails) > 0 && alltrue([for e in var.alert_emails : can(regex("^[^@]+@[^@]+\\.[^@]+$", e))])
+    error_message = "alert_emails must contain at least one valid email address - alerts must reach the team."
+  }
 }
 
 variable "alarm_error_threshold" {
@@ -106,4 +110,30 @@ variable "alarm_invocation_ceiling" {
   description = "Invocations in 5 minutes that indicate a runaway client. A cost guard, not a performance one. INITIAL GUESS - tune after observing a real run."
   type        = number
   default     = 2000
+}
+
+# --- network (vpc.tf) --------------------------------------------------------
+variable "vpc_cidr" {
+  description = "Address range of the CampusPulse VPC. Two /24 private subnets are carved from it."
+  type        = string
+  default     = "10.20.0.0/16"
+}
+
+variable "enable_flow_logs" {
+  description = "Record VPC network traffic to CloudWatch Logs (7-day retention). A few MB a month at our volume."
+  type        = bool
+  default     = true
+}
+
+# --- backups (backup.tf) -----------------------------------------------------
+variable "backup_retention_days" {
+  description = "How long each DAILY AWS Backup snapshot of the events table is kept."
+  type        = number
+  default     = 7
+}
+
+variable "backup_weekly_retention_days" {
+  description = "How long each WEEKLY AWS Backup snapshot is kept."
+  type        = number
+  default     = 35
 }

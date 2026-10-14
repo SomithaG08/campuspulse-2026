@@ -275,3 +275,27 @@ table.events tr:last-child td { border-bottom: 0; }
   .dash, .topbar { padding-left: 14px; padding-right: 14px; }
   .tile-value { font-size: 23px; }
 }
+
+/* ─────────────── role pages (Oct 2026: admin.html / student.html) ─────────────── */
+.role-tag {
+  font-size: 12px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase;
+  color: var(--seq-550); border: 1px solid var(--border);
+  border-radius: 999px; padding: 2px 10px;
+}
+.notice { margin: -4px 0 14px; }
+
+.form label {
+  display: block; margin: 12px 0 6px;
+  font-size: 13px; font-weight: 500; color: var(--text-secondary);
+}
+.form select, .form textarea {
+  width: 100%; font: inherit; padding: 9px 11px;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface-0); color: var(--text-primary);
+}
+.form textarea { resize: vertical; min-height: 72px; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.form-row label { margin-top: 0; }
+.form-result { margin: 12px 0 0; font-size: 13px; font-weight: 500; }
+.form-result.ok { color: var(--status-normal); }
+.form-result.error { color: var(--status-critical); }

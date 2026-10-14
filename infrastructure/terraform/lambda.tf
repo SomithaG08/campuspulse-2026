@@ -1,90 +1,54 @@
 # ---------------------------------------------------------------------------
-# The functions.
+# The functions - TWO, down from five (professor's review, October 2026).
 #
-# PACKAGING: one zip of backend/src, shared by every function. Each function
-# points at a different handler inside it. This means one artifact to build
-# and no chance of two functions running different versions of the validation
-# code - which is the sort of drift that produces a bug nobody can reproduce.
+#   api   every route except POST /login. Runs INSIDE the VPC, in the private
+#         subnets, and reaches DynamoDB only through the gateway endpoint.
+#         handlers/api.py routes on the API Gateway routeKey.
+#   auth  POST /login only. Runs OUTSIDE the VPC because it must call
+#         Cognito's public endpoint, and holds no database permission.
 #
-# No dependencies are vendored: boto3 is already in the Lambda Python runtime,
-# and our own code imports nothing else. The zip is a few kilobytes, which
-# keeps cold starts short.
+# Why not one? Putting login inside the VPC would need a path to Cognito: a
+# NAT Gateway (~$35/month) or a Cognito interface endpoint (~$8/month per AZ).
+# Both break the cost rule. Two functions keep the cost at zero AND keep the
+# important split: the function that can reach the internet cannot touch
+# data; the function that touches data cannot reach the internet.
 #
-# Phase 5 deploys the WRITE path: health, auth, ingest. The read path (query,
-# stats) and its routes arrive in Phase 6.
+# PACKAGING: one zip of backend/src, shared by both functions. No dependencies
+# are vendored: boto3 ships with the Lambda Python runtime.
 # ---------------------------------------------------------------------------
 
 data "archive_file" "backend" {
   type        = "zip"
   source_dir  = "${path.module}/../../backend/src"
   output_path = "${path.module}/build/backend.zip"
+  excludes    = ["**/__pycache__/**"]
 }
 
 locals {
-  # Changing this value alone redeploys every function, which is what you want
-  # when only the code changed.
+  # Changing this value alone redeploys both functions.
   source_hash = data.archive_file.backend.output_base64sha256
-
-  lambda_defaults = {
-    runtime     = "python3.12"
-    memory_size = 256 # more memory also means more CPU; 256MB is a good
-    timeout     = 10  # price/latency point for work this small
-  }
 }
 
-resource "aws_lambda_function" "health" {
-  function_name    = "${local.name}-health"
-  role             = aws_iam_role.health.arn
-  handler          = "handlers.health.handler"
+resource "aws_lambda_function" "api" {
+  function_name    = "${local.name}-api"
+  description      = "CampusPulse API router: events, requests, alerts, stats, health"
+  role             = aws_iam_role.api.arn
+  handler          = "handlers.api.handler"
   filename         = data.archive_file.backend.output_path
   source_code_hash = local.source_hash
-  runtime          = local.lambda_defaults.runtime
-  memory_size      = 128 # it returns a constant; it needs nothing
-  timeout          = 3
+  runtime          = "python3.12"
+  # /stats holds a day of items in memory, and it is now in the same function
+  # as everything else, so the function takes the old stats sizing. More
+  # memory also means more CPU, so every route gets slightly faster.
+  memory_size = 512
+  timeout     = 15
 
-  environment {
-    variables = {
-      STAGE       = var.environment
-      APP_VERSION = var.app_version
-    }
+  # Private subnets in two Availability Zones: if one AZ fails, Lambda keeps
+  # running in the other. No public IP, no internet route - see vpc.tf.
+  vpc_config {
+    subnet_ids         = aws_subnet.private[*].id
+    security_group_ids = [aws_security_group.lambda.id]
   }
-
-  # Without this, Lambda creates its own log group on first invocation with
-  # retention set to "never expire".
-  depends_on = [aws_cloudwatch_log_group.lambda]
-}
-
-resource "aws_lambda_function" "auth" {
-  function_name    = "${local.name}-auth"
-  role             = aws_iam_role.auth.arn
-  handler          = "handlers.auth.handler"
-  filename         = data.archive_file.backend.output_path
-  source_code_hash = local.source_hash
-  runtime          = local.lambda_defaults.runtime
-  memory_size      = local.lambda_defaults.memory_size
-  timeout          = local.lambda_defaults.timeout
-
-  environment {
-    variables = {
-      STAGE             = var.environment
-      APP_VERSION       = var.app_version
-      COGNITO_CLIENT_ID = aws_cognito_user_pool_client.api.id
-      METRIC_NAMESPACE  = var.metric_namespace
-    }
-  }
-
-  depends_on = [aws_cloudwatch_log_group.lambda]
-}
-
-resource "aws_lambda_function" "ingest" {
-  function_name    = "${local.name}-ingest"
-  role             = aws_iam_role.ingest.arn
-  handler          = "handlers.ingest.handler"
-  filename         = data.archive_file.backend.output_path
-  source_code_hash = local.source_hash
-  runtime          = local.lambda_defaults.runtime
-  memory_size      = local.lambda_defaults.memory_size
-  timeout          = local.lambda_defaults.timeout
 
   environment {
     variables = {
@@ -96,52 +60,31 @@ resource "aws_lambda_function" "ingest" {
     }
   }
 
-  depends_on = [aws_cloudwatch_log_group.lambda]
+  # Log group first (explicit retention), and the VPC permissions must exist
+  # before Lambda tries to create its network interfaces in the subnets.
+  depends_on = [
+    aws_cloudwatch_log_group.lambda,
+    aws_iam_role_policy.api_vpc,
+  ]
 }
 
-# --- read path (Phase 6) ---------------------------------------------------
-# Same zip, different handlers, read-only roles.
-
-resource "aws_lambda_function" "query" {
-  function_name    = "${local.name}-query"
-  role             = aws_iam_role.query.arn
-  handler          = "handlers.query.handler"
+resource "aws_lambda_function" "auth" {
+  function_name    = "${local.name}-auth"
+  description      = "CampusPulse POST /login - Cognito only, no data access"
+  role             = aws_iam_role.auth.arn
+  handler          = "handlers.auth.handler"
   filename         = data.archive_file.backend.output_path
   source_code_hash = local.source_hash
-  runtime          = local.lambda_defaults.runtime
-  memory_size      = local.lambda_defaults.memory_size
-  timeout          = local.lambda_defaults.timeout
+  runtime          = "python3.12"
+  memory_size      = 256
+  timeout          = 10
 
   environment {
     variables = {
-      STAGE            = var.environment
-      APP_VERSION      = var.app_version
-      TABLE_NAME       = aws_dynamodb_table.events.name
-      METRIC_NAMESPACE = var.metric_namespace
-    }
-  }
-
-  depends_on = [aws_cloudwatch_log_group.lambda]
-}
-
-resource "aws_lambda_function" "stats" {
-  function_name    = "${local.name}-stats"
-  role             = aws_iam_role.stats.arn
-  handler          = "handlers.stats.handler"
-  filename         = data.archive_file.backend.output_path
-  source_code_hash = local.source_hash
-  runtime          = local.lambda_defaults.runtime
-  # Aggregation holds a day of items in memory, so it gets a little more room.
-  # More memory also means more CPU, which makes the summarise pass faster.
-  memory_size = 512
-  timeout     = 15
-
-  environment {
-    variables = {
-      STAGE            = var.environment
-      APP_VERSION      = var.app_version
-      TABLE_NAME       = aws_dynamodb_table.events.name
-      METRIC_NAMESPACE = var.metric_namespace
+      STAGE             = var.environment
+      APP_VERSION       = var.app_version
+      COGNITO_CLIENT_ID = aws_cognito_user_pool_client.api.id
+      METRIC_NAMESPACE  = var.metric_namespace
     }
   }
 

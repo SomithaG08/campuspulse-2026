@@ -16,6 +16,7 @@ Scale note: five buildings and eleven rooms, on purpose. This is a course
 prototype; see the scale guardrails in the README before adding more.
 """
 
+import os
 from typing import Optional
 
 # --------------------------------------------------------------------------
@@ -110,7 +111,9 @@ TIMESTAMP_MAX_AGE_HOURS = 24
 TIMESTAMP_MAX_FUTURE_MINUTES = 5
 
 # How long an event lives before DynamoDB deletes it automatically.
-TTL_DAYS = 30
+# Terraform passes var.ttl_days to cp-ingest as TTL_DAYS; 30 when unset
+# (unit tests, simulator).
+TTL_DAYS = int(os.environ.get("TTL_DAYS", "30"))
 
 BUILDING_LEVEL_ROOM = "-"
 
@@ -151,6 +154,13 @@ def expected_unit(event_type: str) -> Optional[str]:
 def all_rooms() -> list[tuple[str, str]]:
     """Every (building, room) pair — used by the simulator to pick a target."""
     return [(b, r) for b, cfg in BUILDINGS.items() for r in cfg["rooms"]]
+
+
+def campus_layout() -> dict:
+    """{building: [rooms]} - lets the student page build its room picker from
+    the same source of truth the validator uses, so it can never offer a room
+    the API would reject."""
+    return {b: sorted(c["rooms"]) for b, c in BUILDINGS.items()}
 
 
 def campus_totals() -> dict:

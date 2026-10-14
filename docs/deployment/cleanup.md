@@ -22,24 +22,26 @@ cd infrastructure/terraform
 terraform destroy
 ```
 
-Read what it lists before typing `yes`. It should destroy about 26 resources and nothing you did not expect.
+Read what it lists before typing `yes`. It should destroy about 75 resources and nothing you did not expect.
 
-**S3 will refuse to delete a bucket that still has objects in it.** Empty it first:
-
-```bash
-aws s3 rm s3://<site_bucket_name> --recursive
-```
+Since October 2026:
+- **The S3 bucket and the backup vault have `force_destroy`**, so Terraform empties them itself (every object version and every recovery point). Export anything you need *before*.
+- **The VPC takes a while.** The `api` function's network interfaces are released asynchronously after the function is deleted; `destroy` can wait 20-40 minutes on the security group and subnets. Let it finish rather than interrupting it.
+- **Unsubscribe is automatic**: the SNS subscriptions are deleted with the topic.
 
 ## The manual path
 
 If the state file is lost or `destroy` fails, delete by hand in this order:
 
 1. Empty, then delete the S3 bucket
-2. Delete the API and the Lambda functions (from Phase 5 onward)
+2. Delete the API and the two Lambda functions
+2b. Delete the AWS Backup selection, plan, then the recovery points and the vault
+2c. Delete the VPC endpoint, flow log, security group, subnets, route table, then the VPC (after the Lambda's network interfaces are gone)
+2d. Delete the SNS topic
 3. Delete the CloudWatch log groups, alarms and dashboard
 4. Delete the DynamoDB table — **export first if you need the data**
 5. Delete the Cognito user pool (this deletes the users with it)
-6. Detach and delete the IAM policies, then the four roles
+6. Detach and delete the IAM policies, then the roles (api, auth, backup, flow-logs)
 7. Delete the budget
 
 Roles and policies come last because other resources reference them.
@@ -52,6 +54,9 @@ aws cognito-idp list-user-pools --max-results 20 --region eu-west-3
 aws s3 ls
 aws lambda list-functions --region eu-west-3 --query 'Functions[].FunctionName'
 aws logs describe-log-groups --region eu-west-3 --query 'logGroups[].logGroupName'
+aws ec2 describe-vpcs --region eu-west-3 --filters Name=tag:Project,Values=CampusPulse2026
+aws backup list-backup-vaults --region eu-west-3
+aws sns list-topics --region eu-west-3
 ```
 
 Nothing named `campuspulse` should appear in any of them.

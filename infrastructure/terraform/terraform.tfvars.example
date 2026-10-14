@@ -1,12 +1,29 @@
 # Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored
-# (*.tfvars) so your email address never reaches the public repository.
+# (*.tfvars) so email addresses never reach the public repository.
 
+# Budget alerts (billing) - the account owner.
 notification_email = "your.name@epita.fr"
 
+# Campus alerts and system alarms - the WHOLE TEAM's school addresses.
+# Each person receives an "AWS Notification - Subscription Confirmation" email
+# after `terraform apply` and must click Confirm (check spam/quarantine).
+# Optional: add your Microsoft Teams channel's email address to get alerts
+# posted in the channel (channel ... menu -> Get email address).
+alert_emails = [
+  "somitha.gudivada@epita.fr",
+  "meha.REPLACE@epita.fr",
+  "madhavan.REPLACE@epita.fr",
+  "md.REPLACE@epita.fr",
+]
+
 # Optional - the defaults are fine:
-# project            = "campuspulse"
-# environment        = "dev"
-# region             = "eu-west-3"
-# budget_limit_usd   = 10
-# log_retention_days = 7
-# ttl_days           = 30
+# project                      = "campuspulse"
+# environment                  = "dev"
+# region                       = "eu-west-3"
+# budget_limit_usd             = 10
+# log_retention_days           = 7
+# ttl_days                     = 30
+# vpc_cidr                     = "10.20.0.0/16"
+# enable_flow_logs             = true
+# backup_retention_days        = 7
+# backup_weekly_retention_days = 35

@@ -40,13 +40,15 @@ resource "aws_apigatewayv2_authorizer" "cognito" {
 }
 
 # --- integrations ----------------------------------------------------------
+# Two integrations for two functions (October 2026 consolidation). Every data
+# route goes to the api function, which routes internally on routeKey.
 # AWS_PROXY with payload format 2.0: API Gateway hands the whole request to
 # Lambda as a JSON event and returns whatever Lambda gives back.
 
-resource "aws_apigatewayv2_integration" "health" {
+resource "aws_apigatewayv2_integration" "api" {
   api_id                 = aws_apigatewayv2_api.main.id
   integration_type       = "AWS_PROXY"
-  integration_uri        = aws_lambda_function.health.invoke_arn
+  integration_uri        = aws_lambda_function.api.invoke_arn
   payload_format_version = "2.0"
 }
 
@@ -57,22 +59,25 @@ resource "aws_apigatewayv2_integration" "auth" {
   payload_format_version = "2.0"
 }
 
-resource "aws_apigatewayv2_integration" "ingest" {
-  api_id                 = aws_apigatewayv2_api.main.id
-  integration_type       = "AWS_PROXY"
-  integration_uri        = aws_lambda_function.ingest.invoke_arn
-  payload_format_version = "2.0"
-}
-
 # --- routes ----------------------------------------------------------------
-# Two public routes and two protected ones. A route with no authorizer is
-# reachable by anyone on the internet, so each one below is a deliberate
-# decision, not a default.
+# A route with no authorizer is reachable by anyone on the internet, so the
+# two public ones are listed explicitly and everything else requires a valid
+# Cognito JWT. WHICH role may use a protected route is decided inside the
+# function (common/auth.py) - the authorizer only establishes WHO is calling.
+#
+#   route            roles              page
+#   POST /events     admin              (simulator)
+#   GET  /events     admin              admin
+#   GET  /alerts     admin              admin
+#   GET  /stats      admin, student     admin, student
+#   POST /requests   admin, student     student
+#   GET  /requests   admin (all, day)   admin
+#                    student (own only) student
 
 resource "aws_apigatewayv2_route" "health" {
   api_id    = aws_apigatewayv2_api.main.id
   route_key = "GET /health"
-  target    = "integrations/${aws_apigatewayv2_integration.health.id}"
+  target    = "integrations/${aws_apigatewayv2_integration.api.id}"
   # Public: it returns a constant and touches nothing.
 }
 
@@ -83,81 +88,25 @@ resource "aws_apigatewayv2_route" "login" {
   # Public by necessity: this is where you go to GET a token.
 }
 
-resource "aws_apigatewayv2_route" "post_events" {
+locals {
+  protected_routes = {
+    post_events   = "POST /events"
+    get_events    = "GET /events"
+    get_alerts    = "GET /alerts"
+    get_stats     = "GET /stats"
+    post_requests = "POST /requests"
+    get_requests  = "GET /requests"
+  }
+}
+
+resource "aws_apigatewayv2_route" "protected" {
+  for_each = local.protected_routes
+
   api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "POST /events"
-  target             = "integrations/${aws_apigatewayv2_integration.ingest.id}"
+  route_key          = each.value
+  target             = "integrations/${aws_apigatewayv2_integration.api.id}"
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-  # The ops-only check happens inside the function; the authorizer only
-  # establishes WHO is calling.
-}
-
-resource "aws_apigatewayv2_route" "post_requests" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "POST /requests"
-  target             = "integrations/${aws_apigatewayv2_integration.ingest.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-# --- read path routes (Phase 6) -------------------------------------------
-# All three require a token. The role check inside each function decides
-# whether this particular caller may see this particular view.
-
-resource "aws_apigatewayv2_integration" "query" {
-  api_id                 = aws_apigatewayv2_api.main.id
-  integration_type       = "AWS_PROXY"
-  integration_uri        = aws_lambda_function.query.invoke_arn
-  payload_format_version = "2.0"
-}
-
-resource "aws_apigatewayv2_integration" "stats" {
-  api_id                 = aws_apigatewayv2_api.main.id
-  integration_type       = "AWS_PROXY"
-  integration_uri        = aws_lambda_function.stats.invoke_arn
-  payload_format_version = "2.0"
-}
-
-resource "aws_apigatewayv2_route" "get_events" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "GET /events"
-  target             = "integrations/${aws_apigatewayv2_integration.query.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-resource "aws_apigatewayv2_route" "get_alerts" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "GET /alerts"
-  target             = "integrations/${aws_apigatewayv2_integration.query.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-  # ops-only, enforced in the function
-}
-
-resource "aws_apigatewayv2_route" "get_stats" {
-  api_id             = aws_apigatewayv2_api.main.id
-  route_key          = "GET /stats"
-  target             = "integrations/${aws_apigatewayv2_integration.stats.id}"
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
-
-resource "aws_lambda_permission" "query" {
-  statement_id  = "AllowAPIGatewayInvokeQuery"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.query.function_name
-  principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*"
-}
-
-resource "aws_lambda_permission" "stats" {
-  statement_id  = "AllowAPIGatewayInvokeStats"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.stats.function_name
-  principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*"
 }
 
 # --- stage -----------------------------------------------------------------
@@ -203,10 +152,10 @@ resource "aws_apigatewayv2_stage" "default" {
 # A Lambda does not accept invocations from a service unless that service is
 # explicitly permitted. Without these, every route returns 500.
 
-resource "aws_lambda_permission" "health" {
-  statement_id  = "AllowAPIGatewayInvokeHealth"
+resource "aws_lambda_permission" "api" {
+  statement_id  = "AllowAPIGatewayInvokeApi"
   action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.health.function_name
+  function_name = aws_lambda_function.api.function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*"
 }
@@ -215,14 +164,6 @@ resource "aws_lambda_permission" "auth" {
   statement_id  = "AllowAPIGatewayInvokeAuth"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.auth.function_name
-  principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*"
-}
-
-resource "aws_lambda_permission" "ingest" {
-  statement_id  = "AllowAPIGatewayInvokeIngest"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.ingest.function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*"
 }

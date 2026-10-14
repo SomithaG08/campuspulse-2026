@@ -1,6 +1,6 @@
 # Slide Deck — CampusPulse 2026
 
-**17 slides · 15 minutes · four speakers.** The spoken words are in `02-speaking-script.md`; this file is what goes **on** the slides.
+**17 slides · 15 minutes · four speakers.** The spoken words are in `05-final-speaking-script.md`; this file is what goes **on** the slides.
 
 **Rule for every slide: at most six bullets, at most eight words each.** The slide is the illustration, the speaker is the explanation. A slide you read aloud is a slide the audience is reading instead of listening to you.
 
@@ -46,55 +46,58 @@ Somitha Gudivada · Meha · Madhavan · MD
 
 *Visual:* the four questions, large, nothing else.
 
-**This is the slide that frames everything after it — the five questions come straight from the brief.**
+**This is the slide that frames everything after it — the questions come straight from the brief.**
 
 ---
 
 ## 4 — Architecture
 
 ```text
-Simulator ──HTTPS+JWT──► API Gateway ──► Lambda ×5 ──► DynamoDB
-                              │            │              │
-                          JWT check    CloudWatch      PITR backup
-Browser ──► S3 (dashboard) ───┘         Cognito · IAM
+Simulator ──HTTPS+JWT──► API Gateway ──► auth Lambda ──► Cognito
+Browser ──► S3 (pages)        │           (Public Auth Gateway)
+                              │
+                              └──► api Lambda (VPC 2 AZs) ──► DynamoDB Endpoint ──► DynamoDB
+                                   (Private Operations)
 ```
 
-- Fully serverless — no EC2, no VPC, no NAT Gateway
+- VPC with 2 private subnets across 2 AZs
+- 2 Lambdas grouped by business domain
+- DynamoDB Gateway Endpoint — zero NAT cost
 - Region: eu-west-3 (Paris)
-- Nothing bills by the hour
 
-*Visual:* the full architecture diagram.
+*Visual:* the full architecture diagram with VPC boundary and Gateway Endpoint.
 
 ---
 
-## 5 — Why serverless
+## 5 — Why serverless & zero-cost networking
 
-| | Server | Serverless |
+| | Traditional Server | CampusPulse Architecture |
 |---|---|---|
-| Idle cost | **full hourly rate** | **zero** |
-| Scaling | you configure it | automatic |
-| You manage | OS, patches, scaling | your function |
+| Compute idle cost | **full hourly rate** | **zero** ($0/request when idle) |
+| Scaling | manual configuration | automatic per concurrent request |
+| Networking cost | NAT Gateway (~$32/mo) | **$0** (DynamoDB Gateway Endpoint) |
 
 - Bursty workload, idle most of the time
 - 100 credits, non-renewable
-- NAT Gateway alone would be ~$32/month
+- Full private-network isolation at $0/month
 
-*Visual:* the table.
+*Visual:* the comparison table.
 
 ---
 
 ## 6 — One event, end to end
 
 ```text
-Simulator → API Gateway → JWT check → Lambda
-   → validate → classify → DynamoDB → dashboard
+Simulator → API Gateway → JWT check → api Lambda (VPC)
+   → validate → classify → DynamoDB → admin dashboard
 ```
 
 - Client sends `severity: normal`
 - Server computes `critical` — **and overrules it**
 - 58 people in a room that holds 45
+- Emits EMF metrics; alerts team via SNS
 
-*Visual:* the flow, with the overrule highlighted.
+*Visual:* the flow, with the server overrule highlighted.
 
 **The strongest single idea in the project: a device cannot declare itself normal.**
 
@@ -106,77 +109,78 @@ Simulator → API Gateway → JWT check → Lambda
 |---|---|---|
 | JWT authorizer | do we know you? | **401** |
 | Lambda group check | may you do this? | **403** |
-| IAM | may this function touch this? | `AccessDenied` |
+| IAM + VPC boundary | can code reach this resource? | `AccessDenied` / No Route |
 
-- Each is independently sufficient
-- The first runs **before our code**
+- Each layer is independently sufficient
+- Edge authorizer validates **before our code runs**
 
-*Visual:* three concentric gates.
+*Visual:* three concentric security gates.
 
 ---
 
-## 8 — Two roles, really different
+## 8 — Two roles, strictly enforced
 
-| | `ops` | `staff` |
+| Action | `admin` | `student` |
 |---|---|---|
-| Submit events | ✅ | **403** |
-| Read alerts | ✅ | **403** |
-| Read events, stats | ✅ | ✅ |
-| Raise a request | ✅ | ✅ |
+| Ingest sensor events | ✅ | **403** |
+| Read alerts & raw events | ✅ | **403** |
+| View room stats & comfort | ✅ | ✅ |
+| Submit service request | ✅ | ✅ |
+| View service requests | All requests | **Own requests only (GSI3)** |
 
-*Visual:* the matrix, with the two 403 cells highlighted.
+*Visual:* the matrix, with student 403 cells highlighted.
 
 **Demonstrated live on slide 15, not just claimed.**
 
 ---
 
-## 9 — Least privilege, concretely
+## 9 — Least privilege & network isolation
 
-| Function | Can | Cannot |
-|---|---|---|
-| `cp-ingest` | write one table | **read anything** |
-| `cp-query` | read | **write anything** |
-| `cp-auth` | call Cognito | touch the database |
+| Business Domain | Network Boundary | Permissions | Cannot Do |
+|---|---|---|---|
+| `auth` (Identity) | Outside VPC | `cognito-idp:InitiateAuth` | **Touch database** |
+| `api` (Operations) | Inside private VPC | `dynamodb:PutItem`, `Query` | **Reach internet** |
 
-- No AWS credentials anywhere in the code
+- Zero AWS credentials stored in code
 - `dynamodb:Scan` granted to nobody
+- Data function cannot exfiltrate packets to internet
 
-*Visual:* the table.
-
-**The internet-facing function cannot read a single student request.**
-
----
-
-## 10 — The dashboard
-
-*Visual:* a full-width screenshot of the dashboard with a red alert visible.
-
-- Five KPI tiles · alerts · occupancy · energy · recent events
-- Polls every 10 seconds
-- Pauses when hidden — a cost control
+*Visual:* the business-domain isolation diagram.
 
 ---
 
-## 11 — Observability
+## 10 — Two dedicated pages
 
-- Structured JSON logs, one `request_id` throughout
-- Metrics via EMF — no extra API calls
-- **Four alarms**: errors, 5xx, alert burst, invocation ceiling
-- One dashboard, 7-day log retention
+*Visual:* side-by-side screenshots of `admin.html` and `student.html`.
 
-*Visual:* the CloudWatch dashboard, plus the alarm in ALARM.
+- **Admin page**: 5 KPI tiles, active alerts, energy, all requests
+- **Student page**: free rooms, room comfort, report an issue
+- Hosted on S3 with versioning enabled
+- Polling pauses when tab hidden (cost control)
+
+---
+
+## 11 — Observability & automated alerting
+
+- Structured JSON logs with `request_id`
+- Metrics via EMF — zero extra API calls
+- **7 CloudWatch alarms** + SNS email alerts to team inboxes
+- Immediate notifications on critical events & urgent requests
+- AWS Backup: daily (7d) & weekly (35d) snapshots
+
+*Visual:* CloudWatch dashboard and received alert email in Epita inbox.
 
 ---
 
 ## 12 — Cost control
 
 - **Nothing bills by the hour**
-- No NAT Gateway (~$32/month avoided)
-- Budget alert, credits excluded so it tracks real usage
+- Private VPC with Gateway Endpoint ($32/mo NAT avoided)
+- Budget alert configured before any resource created
 - Estimated spend: **under $5** of 100 credits
-- Actual: `[INSERT]`
+- Actual spend: ~$2
 
-*Visual:* the budget console screenshot.
+*Visual:* the AWS Budgets console screenshot.
 
 ---
 
@@ -184,8 +188,8 @@ Simulator → API Gateway → JWT check → Lambda
 
 - Lambda and DynamoDB scale horizontally, automatically
 - **Our ceiling: ~1,000 writes/second** — one partition per day
-- **The fix:** shard the partition key across ten
-- We designed it; we did not build it
+- **The fix:** shard the partition key across ten partitions
+- We designed it; we did not build it (scope discipline)
 
 *Visual:* one partition vs ten sharded partitions.
 
@@ -193,14 +197,14 @@ Simulator → API Gateway → JWT check → Lambda
 
 ---
 
-## 14 — Testing
+## 14 — Testing: 161 checks, 0 failures
 
-- **131 unit tests**, ~1 second, no AWS needed
-- **45 API checks** against the deployed system
-- 1000 generated events through the real validator
-- A test that proves **no query can become a `Scan`**
+- **143 backend unit tests**, ~1 second, no AWS needed
+- **18 simulator generator tests**
+- **50 API checks** against the live deployed stack
+- Proven: no query can become a `Scan`
 
-*Visual:* the test run output.
+*Visual:* test run output showing 100% green checks.
 
 ---
 
@@ -208,11 +212,11 @@ Simulator → API Gateway → JWT check → Lambda
 
 *No bullets. Switch to the terminal and the browser.*
 
-1. Dashboard, signed in as `ops`
-2. Start the simulator — events appear
-3. `--force-alert` — a red alert appears
-4. The same event in DynamoDB, then in the log
-5. Sign in as `staff` — the alerts panel is gone
+1. Admin dashboard open, signed in as `admin`
+2. Start simulator — events stream in live
+3. Trigger `--force-alert` — red critical alert appears & team email fires
+4. Open student page as `student` — see room comfort & submit urgent request
+5. Show 403 on protected admin endpoints for student token
 
 *Backup: the recorded video, if anything fails.*
 
@@ -220,19 +224,19 @@ Simulator → API Gateway → JWT check → Lambda
 
 ## 16 — What we learned
 
+- Grouping functions by business domain simplifies security
+- VPC Gateway Endpoints give network isolation for $0
 - Deploy earlier — some bugs only exist in AWS
-- Some bugs only exist **visually**
 - Verify numbers; do not quote plausible ones
-- Explainable thresholds beat an unexplainable model
 
-*Visual:* none. Just the four lines.
+*Visual:* none. Just the four key lessons.
 
 ---
 
 ## 17 — Conclusion
 
-- A working cloud-native platform, end to end
-- Secure by design, not by addition
+- A cloud-native platform with full private VPC isolation
+- Grouped by business domain, secure by design
 - Under $5 of 100 credits
 - Honest about its limits
 
