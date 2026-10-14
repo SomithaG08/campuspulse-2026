@@ -1,9 +1,9 @@
 {
-  "run_at": "2026-10-05T13:04:16Z",
+  "run_at": "2026-10-14T16:57:36Z",
   "api": "https://wsjs04q4yi.execute-api.eu-west-3.amazonaws.com",
-  "passed": 45,
+  "passed": 50,
   "failed": 0,
-  "total": 45,
+  "total": 50,
   "results": [
     {
       "id": "T1.1",
@@ -19,27 +19,27 @@
     },
     {
       "id": "T2.1",
-      "description": "valid ops credentials return a token",
+      "description": "valid admin credentials return a token",
       "status": "PASS",
       "detail": "got 200: "
     },
     {
       "id": "T2.2",
-      "description": "login reports the ops role",
+      "description": "login reports the admin role",
       "status": "PASS",
-      "detail": "ops"
+      "detail": "admin"
     },
     {
       "id": "T2.3",
-      "description": "valid staff credentials return a token",
+      "description": "valid student credentials return a token",
       "status": "PASS",
       "detail": "got 200: "
     },
     {
       "id": "T2.4",
-      "description": "login reports the staff role",
+      "description": "login reports the student role",
       "status": "PASS",
-      "detail": "staff"
+      "detail": "student"
     },
     {
       "id": "T2.5",
@@ -79,31 +79,31 @@
     },
     {
       "id": "T3.3",
-      "description": "staff CANNOT submit events (403)",
+      "description": "student CANNOT submit sensor events (403)",
       "status": "PASS",
       "detail": "got 403"
     },
     {
       "id": "T3.4",
-      "description": "staff CANNOT read alerts (403)",
+      "description": "student CANNOT read alerts (403)",
       "status": "PASS",
       "detail": "got 403"
     },
     {
       "id": "T3.5",
-      "description": "staff CAN read events (200)",
+      "description": "student CANNOT read raw events (403)",
       "status": "PASS",
-      "detail": "got 200"
+      "detail": "got 403"
     },
     {
       "id": "T3.6",
-      "description": "staff CAN read statistics (200)",
+      "description": "student CAN read statistics (200)",
       "status": "PASS",
       "detail": "got 200"
     },
     {
       "id": "T3.7",
-      "description": "ops CAN read alerts (200)",
+      "description": "admin CAN read alerts (200)",
       "status": "PASS",
       "detail": "got 200"
     },
@@ -117,13 +117,13 @@
       "id": "T4.1",
       "description": "a valid event is stored (201)",
       "status": "PASS",
-      "detail": "got 201: {'event_id': 'test-1791205454509', 'severity': 'normal', 'reason': 'occupancy 10 is within capacity 45', 'alert': False, 'stored_at': '2026-10-05T13:04:13Z'}"
+      "detail": "got 201: {'event_id': 'test-1791997053825', 'severity': 'normal', 'reason': 'occupancy 10 is within capacity 45', 'alert': False, 'stored_at': '2026-10-14T16:57:33Z'}"
     },
     {
       "id": "T4.2",
       "description": "a normal event is classified normal",
       "status": "PASS",
-      "detail": "{'event_id': 'test-1791205454509', 'severity': 'normal', 'reason': 'occupancy 10 is within capacity 45', 'alert': False, 'stored_at': '2026-10-05T13:04:13Z'}"
+      "detail": "{'event_id': 'test-1791997053825', 'severity': 'normal', 'reason': 'occupancy 10 is within capacity 45', 'alert': False, 'stored_at': '2026-10-14T16:57:33Z'}"
     },
     {
       "id": "T4.3",
@@ -135,7 +135,7 @@
       "id": "T4.4",
       "description": "SERVER OVERRULES the client's severity -> critical",
       "status": "PASS",
-      "detail": "{'event_id': 'test-1791205454610', 'severity': 'critical', 'reason': 'occupancy 58 exceeds 120% of capacity 45', 'alert': True, 'stored_at': '2026-10-05T13:04:13Z'}"
+      "detail": "{'event_id': 'test-1791997053983', 'severity': 'critical', 'reason': 'occupancy 58 exceeds 120% of capacity 45', 'alert': True, 'stored_at': '2026-10-14T16:57:34Z'}"
     },
     {
       "id": "T4.5",
@@ -145,15 +145,15 @@
     },
     {
       "id": "T4.6",
-      "description": "staff CAN raise a service request (201)",
+      "description": "student CAN raise a service request (201)",
       "status": "PASS",
-      "detail": "got 201: {'event_id': 'req-1791205453930', 'severity': 'critical', 'reason': 'service request reported as urgent', 'alert': True, 'stored_at': '2026-10-05T13:04:13Z'}"
+      "detail": "got 201: {'event_id': 'req-1791997054339', 'severity': 'critical', 'reason': 'service request reported as urgent', 'alert': True, 'stored_at': '2026-10-14T16:57:34Z'}"
     },
     {
       "id": "T4.7",
       "description": "an urgent request is critical",
       "status": "PASS",
-      "detail": "{'event_id': 'req-1791205453930', 'severity': 'critical', 'reason': 'service request reported as urgent', 'alert': True, 'stored_at': '2026-10-05T13:04:13Z'}"
+      "detail": "{'event_id': 'req-1791997054339', 'severity': 'critical', 'reason': 'service request reported as urgent', 'alert': True, 'stored_at': '2026-10-14T16:57:34Z'}"
     },
     {
       "id": "T5.1",
@@ -219,7 +219,7 @@
       "id": "T5.11",
       "description": "rejections include a useful message",
       "status": "PASS",
-      "detail": "{'error': 'ValidationError', 'message': 'date must be in YYYY-MM-DD format', 'request_id': 'dc78a06a-d954-4386-88da-4856cda07e40'}"
+      "detail": "{'error': 'ValidationError', 'message': 'date must be in YYYY-MM-DD format', 'request_id': 'f6be11c3-3080-4fc7-b649-a32679ed0878'}"
     },
     {
       "id": "T6.1",
@@ -255,25 +255,55 @@
       "id": "T6.6",
       "description": "statistics reflect the events we just submitted",
       "status": "PASS",
-      "detail": "26"
+      "detail": "3"
     },
     {
       "id": "T7.1",
       "description": "the critical event submitted in T4 appears in /alerts",
       "status": "PASS",
-      "detail": "looking for test-1791205454610"
+      "detail": "looking for test-1791997053983"
     },
     {
       "id": "T7.2",
       "description": "the same event appears in /events",
       "status": "PASS",
-      "detail": "looking for test-1791205454610"
+      "detail": "looking for test-1791997053983"
     },
     {
       "id": "T7.3",
       "description": "the alert is counted in the statistics",
       "status": "PASS",
-      "detail": "alert_count=10"
+      "detail": "alert_count=2"
+    },
+    {
+      "id": "T8.1",
+      "description": "student GET /requests returns their own requests (200)",
+      "status": "PASS",
+      "detail": "got 200, looking for req-1791997054339"
+    },
+    {
+      "id": "T8.2",
+      "description": "student view does not expose who raised a request",
+      "status": "PASS",
+      "detail": "requested_by present"
+    },
+    {
+      "id": "T8.3",
+      "description": "admin GET /requests sees the student's request (200)",
+      "status": "PASS",
+      "detail": "got 200"
+    },
+    {
+      "id": "T8.4",
+      "description": "admin view shows who raised it",
+      "status": "PASS",
+      "detail": "student@northbridge.edu"
+    },
+    {
+      "id": "T8.5",
+      "description": "GET /requests without a token returns 401",
+      "status": "PASS",
+      "detail": "got 401"
     }
   ]
 }
