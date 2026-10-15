@@ -22,7 +22,7 @@ Cost figures are summarised here and sourced in full in `07-cost-model.md`.
 
 **6. What comes out?** The Lambda's response as HTTP, or a 401 from the authorizer, a 429 from throttling, or a 5xx if the function failed.
 
-**7. What does it communicate with?** Inbound: simulator, browser. Outbound: the five Lambdas. Sideways: Cognito for public keys, CloudWatch for logs.
+**7. What does it communicate with?** Inbound: simulator, browser. Outbound: the two domain-grouped Lambdas (`auth` outside VPC, `api` inside VPC). Sideways: Cognito for public keys, CloudWatch for logs.
 
 **8. Why not the alternative?** REST API v1 costs $3.50 per million against HTTP API's $1.00, needs more configuration for CORS and Cognito, and its extra features (API keys, WAF, caching) are ones we do not use. An Nginx/Node API on EC2 would bill by the hour and make us responsible for TLS and patching.
 
@@ -202,17 +202,36 @@ Cost figures are summarised here and sourced in full in `07-cost-model.md`.
 
 ---
 
+## Amazon VPC & DynamoDB Gateway Endpoint
+
+**1. What is it?**
+*Simple:* a private, fenced network for our core data-handling code.
+*Technical:* an isolated virtual network (`10.20.0.0/16`) spanning two Availability Zones with private subnets (`10.20.1.0/24`, `10.20.2.0/24`). It has **no Internet Gateway and no NAT Gateway**. A **DynamoDB Gateway Endpoint** (`vpce-01e1d8cc6be9c6944`) routes AWS API calls directly over private AWS backbone infrastructure.
+
+**2. Why are we using it?** Network isolation for the `api` Lambda: even if the function were compromised, it cannot make outbound requests to the internet or exfiltrate campus data.
+
+**3. Cost.** **$0.00/month**. Gateway endpoints are free; having no NAT Gateway and no Internet Gateway keeps network spend at zero.
+
+---
+
+## Amazon SNS (Simple Notification Service)
+
+**1. What is it?** A pub/sub messaging service.
+**2. Why are we using it?** Dispatches email notifications to team members (`campuspulse-dev-alerts`) whenever CloudWatch alarms detect critical conditions (abnormal telemetry burst, urgent maintenance request, or high error rates).
+**3. Cost.** Free tier includes 1,000 email notifications/month ($0.00).
+
+---
+
 ## Services we deliberately do NOT use
 
 | Service | Why not |
 |---|---|
-| **EC2** | Hourly billing for something that idles; OS patching; a VPC to manage |
-| **RDS** | Hourly billing 24/7; needs a VPC; SQL we do not need |
-| **NAT Gateway** | ~$30-35/month to give private subnets internet access we do not need. The most common way a student AWS budget disappears |
-| **ELB / ALB** | Hourly billing; API Gateway already load-balances |
-| **Kinesis / MSK** | Built for high-throughput streaming; our volume does not justify it; no free tier |
+| **EC2** | Hourly billing for something that idles; OS patching; unnecessary overhead |
+| **RDS** | Hourly billing 24/7; SQL relational queries we do not need |
+| **NAT Gateway** | ~$30-35/month to give private subnets internet access. Our data Lambda needs no internet route; the DynamoDB Gateway Endpoint provides database access at $0.00 |
+| **ELB / ALB** | Hourly billing; API Gateway already load-balances and routes |
+| **Kinesis / MSK** | Built for ultra-high-throughput streaming; our volume does not justify it; no free tier |
 | **ECS / EKS** | Orchestration for containers we are not running |
-| **CloudFront** | A CDN for one browser in one room |
-| **SNS** | Only if we add email alerting later (optional feature O2) |
+| **CloudFront** | Added complexity and latency for a simple campus demo dashboard |
 
 Being able to say *why not* is worth as much at the oral as saying why.

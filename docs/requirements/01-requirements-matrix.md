@@ -139,7 +139,7 @@ The team confirmed the AWS account is a standard account created with a school e
 | OD-1 | Cognito vs. custom JWT auth | **Cognito user pool, Essentials tier** — see `docs/architecture/01-architecture-decisions.md` AD-3 |
 | OD-2 | Terraform vs. CLI deployment | **Terraform for infrastructure + a shell script for Lambda code**, confirmed in Phase 4 — AD-9 |
 | OD-3 | Region | **eu-west-3 (Paris)** — AD-1 |
-| OD-4 | Any EC2/VPC needed? | **No.** Fully serverless; no VPC — AD-7 |
+| OD-4 | Any EC2/VPC needed? | **Yes (VPC added per review).** Dedicated VPC (10.20.0.0/16) across 2 AZ private subnets with DynamoDB Gateway Endpoint ($0 cost, no NAT/IGW) — AD-10 |
 
 One new constraint emerged from verifying the current AWS Free Tier: on the Free plan an account **closes** at six months or at credit depletion, whichever comes first. See risk **C5** and `docs/cost/01-cost-model.md` §1.
 

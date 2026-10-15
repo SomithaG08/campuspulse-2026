@@ -1,4 +1,8 @@
-# Speaking Script
+# Speaking Script — Phase 15 (Pre-Review)
+
+> [!IMPORTANT]
+> **SUPERSEDED by [`05-final-speaking-script.md`](05-final-speaking-script.md)**:
+> This document reflects the historical pre-review Phase 15 architecture. For the final presentation incorporating the professor's review corrections (VPC isolation, DynamoDB gateway endpoint, 2 business-domain functions, and student/admin portals), use **[`05-final-speaking-script.md`](05-final-speaking-script.md)**.
 
 Only the words to be spoken. Nothing else.
 
@@ -14,9 +18,11 @@ A university campus produces thousands of measurements every day. How full each 
 
 So the operations team has four practical questions. Which rooms are overloaded right now. Which buildings are consuming the most energy. Whether anything is abnormal. And which student requests are urgent. Our platform exists to answer those four questions, continuously, without anyone having to look for the answers.
 
-Here is the architecture. A Python simulator stands in for the campus sensors. It sends events over HTTPS to Amazon API Gateway, which invokes one of five Lambda functions, which writes to DynamoDB. A dashboard hosted on S3 reads the same data back. Cognito handles identity, CloudWatch handles monitoring, and IAM controls what each component is permitted to do. Everything is in the Paris region, and everything is serverless.
+> **Note:** The definitive 10-minute presentation speaking script corresponding to the final 15-slide deck (`CampusPulse_2026_Final_Presentation.pptx`) is in `docs/presentation/05-final-speaking-script.md`.
 
-We chose serverless for one reason above all others. Our workload is bursty — events arrive during a demonstration and then nothing for days. A virtual machine bills us every hour whether anyone is using it or not. Lambda bills per request and costs nothing while idle. We have one hundred credits that do not refill, so "costs nothing while idle" is the most valuable property available to us. To give one concrete number: a design with private subnets would need a NAT Gateway, which costs about thirty-two dollars a month to exist. That single component would have consumed a third of our budget doing nothing for us.
+Here is the architecture. A Python simulator stands in for the campus sensors. It sends events over HTTPS to Amazon API Gateway, which invokes our domain-grouped Lambda functions. Authentication (`auth`) runs outside the VPC to interface with Cognito at $0 cost, while campus operational routes (`api`) run in private subnets inside our dedicated VPC, communicating with DynamoDB via a private Gateway Endpoint. Role-specific portals hosted on S3 (admin and student) read the data back. Cognito handles identity, CloudWatch and SNS handle monitoring and team email alerts, and IAM controls what each component is permitted to do. Everything is in the Paris region, and everything is serverless.
+
+We chose serverless and private Gateway Endpoints for one reason above all others. Our workload is bursty — events arrive during a demonstration and then nothing for days. A virtual machine bills us every hour whether anyone is using it or not. Lambda bills per request and costs nothing while idle. Furthermore, by using a free DynamoDB Gateway Endpoint instead of a NAT Gateway, we achieved full VPC network isolation without incurring the ~$32/month NAT charge that would drain a third of our fixed student credit budget.
 
 Now let me take one event through the whole system. The simulator invents a reading: fifty-eight people in Library-A room A203. It sends that over HTTPS with an authentication token. API Gateway checks the token before any of our code runs. Lambda then validates every field — the room must exist, the unit must be right, the value must be a plausible number, the timestamp must be recent. Then it classifies the severity. Room A203 holds forty-five people, so fifty-eight is a hundred and twenty-nine per cent of capacity, and that is critical.
 
@@ -34,9 +40,9 @@ The second layer is inside the function. The token carries the user's group, and
 
 The third layer is IAM, which decides whether a function may touch a resource at all. Even if an attacker controlled our code completely, they would still be limited to whatever that function's role allows.
 
-We have two roles, and they really do behave differently. Operations staff can submit events and read alerts. Teaching staff can read events and statistics, and can raise a service request — but if they try to submit a sensor reading or read the alerts list, they get a 403. Madhavan will show you that live.
+We have two roles, and they really do behave differently. Administrators can submit events and read alerts. Students can read events, comfort stats, and submit facility requests — but if they try to submit sensor readings or read the alerts list, they get a 403. Madhavan will show you that live.
 
-Least privilege is where this becomes concrete. We deliberately split the backend into five small functions instead of one, and each has its own role. The function that receives data from the internet can write to one table and cannot read anything at all. The functions that read cannot write. So if somebody found a flaw in our most exposed function, the worst they could do is add junk events. They could not read a single student's service request.
+Least privilege is where this becomes concrete. We grouped our backend into two business domain functions: `auth` outside the VPC handles identity with zero database access — it cannot read or write campus data at all. The `api` function runs inside our custom VPC in private subnets with zero internet route, reaching DynamoDB exclusively through a private Gateway Endpoint. An attacker has no path to exfiltrate data to the internet.
 
 We also audited this rather than assuming it. We listed every AWS call the code makes and compared it against every permission granted: they match exactly, with no excess and no gaps. There are no AWS credentials anywhere in our code — the functions receive temporary credentials automatically. And we never grant the permission to scan the database, so if anyone later wrote a query that tried to, it would fail loudly rather than quietly getting slower every week.
 
@@ -66,7 +72,7 @@ Before the demo, two things about how this scales and how we tested it.
 
 Lambda and DynamoDB both scale horizontally and automatically. More events means more concurrent function instances, and we never configure that. But our design does have a ceiling, and we would rather tell you where it is than be asked. All of one day's events are stored under a single partition key, and a DynamoDB partition sustains roughly a thousand writes per second. Beyond that we would need to spread the writes across ten partitions by adding a shard suffix to the key, and read all ten in parallel. That change touches two files. We designed it; we did not build it, because our prototype is nowhere near that volume and building unused machinery would be harder to defend than describing it.
 
-On testing, we have two layers. A hundred and thirty-one unit tests run in about a second with no AWS account at all, because we deliberately kept the logic free of cloud dependencies. Then forty-five tests run against the deployed system to check the wiring — the parts a unit test cannot see, like permissions and routing.
+On testing, we have two layers. A hundred and sixty-one automated tests run in about a second with no AWS account at all, because we deliberately kept the logic free of cloud dependencies. Then fifty tests run against the deployed system to check the wiring — the parts a unit test cannot see, like permissions, VPC routing, and tokens.
 
 Two of those tests are really design guarantees rather than ordinary tests. One proves that no query our code can build will ever become a full table scan. The other takes a thousand events generated by the simulator and runs them through the real validator, so the simulator can never be the reason a live demonstration shows an error.
 
@@ -74,7 +80,7 @@ Which brings us to the demonstration.
 
 [DEMO — the sequence is in `03-demo-runbook.md`]
 
-So: an event entered the system, was judged critical by rules we wrote, was stored, appeared on the dashboard, and is traceable in the logs by a single identifier. And the same page shows a different thing to a different role.
+So: an event entered the system, was judged critical by rules we wrote, was stored, appeared on the dashboard, and is traceable in the logs by a single identifier. And the role-specific pages show different interfaces and capabilities to administrators and students.
 
 ---
 

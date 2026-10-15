@@ -1,5 +1,5 @@
 {
-  "run_at": "2026-10-14T16:57:36Z",
+  "run_at": "2026-10-15T22:30:15Z",
   "api": "https://wsjs04q4yi.execute-api.eu-west-3.amazonaws.com",
   "passed": 50,
   "failed": 0,
@@ -117,13 +117,13 @@
       "id": "T4.1",
       "description": "a valid event is stored (201)",
       "status": "PASS",
-      "detail": "got 201: {'event_id': 'test-1791997053825', 'severity': 'normal', 'reason': 'occupancy 10 is within capacity 45', 'alert': False, 'stored_at': '2026-10-14T16:57:33Z'}"
+      "detail": "got 201: {'event_id': 'test-1792103365895', 'severity': 'normal', 'reason': 'occupancy 10 is within capacity 45', 'alert': False, 'stored_at': '2026-10-15T22:29:26Z'}"
     },
     {
       "id": "T4.2",
       "description": "a normal event is classified normal",
       "status": "PASS",
-      "detail": "{'event_id': 'test-1791997053825', 'severity': 'normal', 'reason': 'occupancy 10 is within capacity 45', 'alert': False, 'stored_at': '2026-10-14T16:57:33Z'}"
+      "detail": "{'event_id': 'test-1792103365895', 'severity': 'normal', 'reason': 'occupancy 10 is within capacity 45', 'alert': False, 'stored_at': '2026-10-15T22:29:26Z'}"
     },
     {
       "id": "T4.3",
@@ -135,7 +135,7 @@
       "id": "T4.4",
       "description": "SERVER OVERRULES the client's severity -> critical",
       "status": "PASS",
-      "detail": "{'event_id': 'test-1791997053983', 'severity': 'critical', 'reason': 'occupancy 58 exceeds 120% of capacity 45', 'alert': True, 'stored_at': '2026-10-14T16:57:34Z'}"
+      "detail": "{'event_id': 'test-1792103366168', 'severity': 'critical', 'reason': 'occupancy 58 exceeds 120% of capacity 45', 'alert': True, 'stored_at': '2026-10-15T22:29:26Z'}"
     },
     {
       "id": "T4.5",
@@ -147,13 +147,13 @@
       "id": "T4.6",
       "description": "student CAN raise a service request (201)",
       "status": "PASS",
-      "detail": "got 201: {'event_id': 'req-1791997054339', 'severity': 'critical', 'reason': 'service request reported as urgent', 'alert': True, 'stored_at': '2026-10-14T16:57:34Z'}"
+      "detail": "got 201: {'event_id': 'req-1792103366720', 'severity': 'critical', 'reason': 'service request reported as urgent', 'alert': True, 'stored_at': '2026-10-15T22:29:26Z'}"
     },
     {
       "id": "T4.7",
       "description": "an urgent request is critical",
       "status": "PASS",
-      "detail": "{'event_id': 'req-1791997054339', 'severity': 'critical', 'reason': 'service request reported as urgent', 'alert': True, 'stored_at': '2026-10-14T16:57:34Z'}"
+      "detail": "{'event_id': 'req-1792103366720', 'severity': 'critical', 'reason': 'service request reported as urgent', 'alert': True, 'stored_at': '2026-10-15T22:29:26Z'}"
     },
     {
       "id": "T5.1",
@@ -219,7 +219,7 @@
       "id": "T5.11",
       "description": "rejections include a useful message",
       "status": "PASS",
-      "detail": "{'error': 'ValidationError', 'message': 'date must be in YYYY-MM-DD format', 'request_id': 'f6be11c3-3080-4fc7-b649-a32679ed0878'}"
+      "detail": "{'error': 'ValidationError', 'message': 'date must be in YYYY-MM-DD format', 'request_id': 'e45a7946-a8a2-478f-a0df-1564f108cb94'}"
     },
     {
       "id": "T6.1",
@@ -261,13 +261,13 @@
       "id": "T7.1",
       "description": "the critical event submitted in T4 appears in /alerts",
       "status": "PASS",
-      "detail": "looking for test-1791997053983"
+      "detail": "looking for test-1792103366168"
     },
     {
       "id": "T7.2",
       "description": "the same event appears in /events",
       "status": "PASS",
-      "detail": "looking for test-1791997053983"
+      "detail": "looking for test-1792103366168"
     },
     {
       "id": "T7.3",
@@ -279,7 +279,7 @@
       "id": "T8.1",
       "description": "student GET /requests returns their own requests (200)",
       "status": "PASS",
-      "detail": "got 200, looking for req-1791997054339"
+      "detail": "got 200, looking for req-1792103366720"
     },
     {
       "id": "T8.2",

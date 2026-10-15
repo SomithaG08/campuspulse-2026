@@ -24,7 +24,7 @@ Tick them off. If you cannot answer a step's questions, do not move on — it wi
 **Answer:**
 1. Trace one event from the simulator to the dashboard, naming every component it touches.
 2. Why serverless instead of EC2? Give the cost reason and the learning reason.
-3. Why do we have five Lambda functions instead of one?
+3. Why do we have two domain-grouped Lambda functions (auth outside VPC, api inside VPC) instead of five nano-functions or one monolith?
 
 ## Step 3 — APIs and JSON (45 min)
 
@@ -32,7 +32,7 @@ Tick them off. If you cannot answer a step's questions, do not move on — it wi
 **Do:** install `curl` or open Postman. Call any public API — `curl https://api.github.com/users/github` will do — and read the JSON that comes back.
 **Understand:** method, path, headers, body, status code.
 **Answer:**
-1. What is the difference between 401 and 403? Which does a `staff` token get on `/alerts`, and why?
+1. What is the difference between 401 and 403? Which does a `student` token get on `/alerts`, and why?
 2. What does `Authorization: Bearer <token>` do?
 3. Why is `POST /events` a POST and `GET /stats` a GET?
 
@@ -65,8 +65,8 @@ Tick them off. If you cannot answer a step's questions, do not move on — it wi
 ## Step 7 — Authentication and security (1 h) — *Meha*
 
 **Read:** `03-services-explained.md` → Cognito and IAM; `05-api-contract.md` → the permission matrix; the threat model once written.
-**Do:** log in as both users. Paste each token into jwt.io and find `cognito:groups`. Then call `/alerts` with the `staff` token and watch the 403 arrive.
-**Answer:** Name the three enforcement layers in order. Why does our code never see a stored password? What does least privilege mean *concretely* for `cp-ingest`?
+**Do:** log in as both users. Paste each token into jwt.io and find `cognito:groups`. Then call `/alerts` with the `student` token and watch the 403 arrive.
+**Answer:** Name the three enforcement layers in order. Why does our code never see a stored password? What does least privilege mean *concretely* for the `api` function inside our VPC?
 
 ## Step 8 — Monitoring (45 min) — *MD*
 

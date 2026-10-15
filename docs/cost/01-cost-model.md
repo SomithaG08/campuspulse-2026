@@ -81,7 +81,7 @@ Ranked by how much damage per hour of inattention:
 
 ## 5. Cleanup, when the project is over
 
-In dependency order: empty and delete the S3 bucket → delete the API → delete the five Lambdas and their log groups → delete the DynamoDB table (**export first if the data is needed as evidence**) → delete the Cognito user pool → delete the IAM roles → delete the alarms, dashboard and budget. Then confirm the credit balance stops moving for 24 hours.
+In dependency order: empty and delete the S3 bucket → delete the API Gateway routes → delete the Lambdas and their log groups → delete the VPC endpoints and VPC subnets → delete the DynamoDB table (**export first if the data is needed as evidence**) → delete the Cognito user pool → delete the IAM roles → delete the alarms, dashboard, and budget. Then confirm the credit balance stops moving for 24 hours.
 
 A `terraform destroy` does most of this in one command, which is one more argument for Infrastructure as Code.
 

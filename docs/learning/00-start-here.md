@@ -32,16 +32,18 @@ That last one is why this project can exist on a student budget.
 
 ## 4. What is AWS?
 
-Amazon Web Services, the largest cloud provider, offering roughly two hundred services. **We use seven.** Ignore the other hundred and ninety-three — they are not on the exam and they are not in our project.
+Amazon Web Services, the largest cloud provider, offering roughly two hundred services. Following our review corrections, our architecture uses the following core serverless and networking components:
 
 | Service | What it does for us |
 |---|---|
 | **API Gateway** | The front door. Receives every request from the internet |
-| **Lambda** | Runs our code, but only when a request arrives |
-| **DynamoDB** | Stores the events |
-| **Cognito** | Handles users, passwords and roles |
-| **S3** | Serves the dashboard's files |
-| **CloudWatch** | Logs, metrics and alarms — how we see what happened |
+| **Lambda** | Runs our code, grouped by domain (`auth` outside VPC, `api` inside VPC) |
+| **DynamoDB** | Stores the events, protected by Point-in-Time Recovery and AWS Backup |
+| **Cognito** | Handles users, passwords and roles (`admin` vs `student`) |
+| **VPC & Gateway Endpoint** | Private network isolating data Lambda and DynamoDB route ($0 cost) |
+| **S3** | Serves the role-specific portals (`admin.html`, `student.html`) |
+| **CloudWatch & SNS** | Logs, metrics, alarms, and email alerts to team inboxes |
+| **AWS Backup** | Daily automated backup vault and retention plan |
 | **IAM** | Decides which part of our system may touch which other part |
 
 ## 5. What is Big Data?
