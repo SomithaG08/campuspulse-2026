@@ -36,6 +36,8 @@ npm-debug.log*
 
 # --- Packaging artifacts ---
 *.zip
+*.tar.gz
+_backup*
 lambda_package/
 
 # --- OS / editor ---
@@ -56,4 +58,7 @@ Windows PowerShell.txt
 Final Run Commands.txt
 *.pptx
 *.docx
+!docs/presentation/*.pptx
+!docs/presentation/*.docx
 *.tar.gz
+_backup*

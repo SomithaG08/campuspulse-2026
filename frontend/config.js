@@ -11,6 +11,10 @@
  */
 window.CAMPUSPULSE_CONFIG = {
   API_URL: "https://wsjs04q4yi.execute-api.eu-west-3.amazonaws.com/",
+  apiEndpoint: "https://wsjs04q4yi.execute-api.eu-west-3.amazonaws.com/",
+  userPoolId: "eu-west-3_h0OpNKIwF",
+  clientId: "4mcnb4t8o9fk0cd3egjvhp66ro",
+  region: "eu-west-3",
   POLL_SECONDS: 10,
   // Stop polling after this long without interaction. A dashboard left open
   // in a forgotten tab would otherwise make ~17,000 requests a day against a
