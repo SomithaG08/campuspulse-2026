@@ -3,7 +3,7 @@
 A cloud-native smart campus operations platform for the fictional NorthBridge University.
 Final project — **Big Data & Cloud Computing**, EPITA, 2025-2026.
 
-**Team:** Somitha Gudivada · Meha · Madhavan · MD
+**Team:** Somitha Gudivada · Manimegalai · Madhavan · MD Mazadul
 
 > **12 October 2026 — review corrections implemented:** VPC (private subnets, DynamoDB gateway endpoint), backups (AWS Backup + PITR + S3 versioning), alerts emailed to the team's school addresses, separate **admin** and **student** pages, and **two Lambda functions grouped by business domain** (`auth` public identity gateway outside VPC, `api` private campus operations inside VPC). Summary: [`docs/requirements/21-professor-corrections.md`](docs/requirements/21-professor-corrections.md) · upgrade steps: [`docs/deployment/06-apply-corrections.md`](docs/deployment/06-apply-corrections.md).
 

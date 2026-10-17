@@ -536,7 +536,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
     <div class="cover-footer">
         <div>
             <div class="meta-label" style="color: #94A3B8;">Project Engineering Team</div>
-            <div class="team-members-list">Somitha Gudivada · Meha · Madhavan · MD</div>
+            <div class="team-members-list">Somitha Gudivada · Manimegalai · Madhavan · MD Mazadul</div>
         </div>
         <div style="text-align: right;">
             <div style="font-weight: 600; color: #FFFFFF;">NorthBridge University Prototype</div>
@@ -596,7 +596,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <td>Ingest and stats routes, severity rules, shared campus configuration, VPC and backup infrastructure</td>
 </tr>
 <tr>
-<td>Meha</td>
+<td>Manimegalai</td>
 <td>Identity and security</td>
 <td>Cognito (admin/student groups), the auth function, IAM policies, threat model</td>
 </tr>
@@ -606,7 +606,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <td>Simulator, test suites, demo script</td>
 </tr>
 <tr>
-<td>MD</td>
+<td>MD Mazadul</td>
 <td>Interface and observability</td>
 <td>Admin and student pages, query and requests routes, CloudWatch alarms, team email alerts, evidence</td>
 </tr>
@@ -1705,9 +1705,9 @@ $ aws cognito-idp list-user-pools --region eu-west-3 --query "UserPools[?contain
 <p>In the order we would actually do them: CloudFront in front of the pages for HTTPS; a status workflow for student requests (open → in progress → resolved, visible on the student page); cross-region copies of the backup snapshots; statistical anomaly detection using a rolling mean and standard deviation per room; pre-aggregated counters via DynamoDB Streams; a CI/CD pipeline; an S3 data lake with Athena for historical analytics; and multi-region DR — which would be the largest change and the first thing a real campus would require.</p>
 <h3 id="11-6-what-the-team-learned">11.6 What the team learned</h3>
 <p><strong>Somitha Gudivada:</strong> Building the ingestion pipeline taught me how much of a real system lives in the details between components — not in any single Lambda function, but in the contract between the simulator, the validator, and the database schema. Writing the Terraform deployment from scratch made the IAM trust model concrete in a way documentation never had. The biggest surprise was how much a careful data model decision (partition key choice, TTL) shapes every query that comes after it.</p>
-<p><strong>Meha:</strong> Implementing Cognito and the JWT authorizer showed me that identity is infrastructure — a misconfigured Cognito pool or a missing <code>sub</code> claim breaks the entire system before any business logic runs. The gap between "authentication works" and "authorization is correct" became very clear when we had to audit every route for missing group checks. Threat modelling a system I built myself was harder than expected: you naturally miss the risks you designed around.</p>
+<p><strong>Manimegalai:</strong> Implementing Cognito and the JWT authorizer showed me that identity is infrastructure — a misconfigured Cognito pool or a missing <code>sub</code> claim breaks the entire system before any business logic runs. The gap between "authentication works" and "authorization is correct" became very clear when we had to audit every route for missing group checks. Threat modelling a system I built myself was harder than expected: you naturally miss the risks you designed around.</p>
 <p><strong>Madhavan:</strong> Writing the simulator made me think about what a real IoT device sends — not just valid events, but edge cases like missing fields, duplicate IDs, and bursts. The API test suite forced us to be explicit about every assumption the backend makes, which surfaced three validation gaps we hadn't caught in unit tests. Running the demo end-to-end was the moment the system felt real.</p>
-<p><strong>MD:</strong> Building the dashboard showed how much the frontend experience depends on API design decisions made weeks earlier — a small change in the response shape breaks the chart. Setting up CloudWatch alarms taught me to think in thresholds before deployment, not after something breaks. The evidence collection process was unexpectedly useful: screenshots taken while testing became the clearest proof of what the system actually does.</p>
+<p><strong>MD Mazadul:</strong> Building the dashboard showed how much the frontend experience depends on API design decisions made weeks earlier — a small change in the response shape breaks the chart. Setting up CloudWatch alarms taught me to think in thresholds before deployment, not after something breaks. The evidence collection process was unexpectedly useful: screenshots taken while testing became the clearest proof of what the system actually does.</p>
 <hr/>
 <h2 id="12-team-contributions">12. Team Contributions</h2>
 <table>
@@ -1729,7 +1729,7 @@ $ aws cognito-idp list-user-pools --region eu-west-3 --query "UserPools[?contain
 <td>25%</td>
 </tr>
 <tr>
-<td>Meha</td>
+<td>Manimegalai</td>
 <td>the auth function, <code>common/auth.py</code>, Cognito Terraform (<code>cognito.tf</code>), IAM policies (<code>iam.tf</code>)</td>
 <td>Threat model, Cognito explainer, IAM explainer, security section</td>
 <td>IAM audit, security review</td>
@@ -1743,7 +1743,7 @@ $ aws cognito-idp list-user-pools --region eu-west-3 --query "UserPools[?contain
 <td>25%</td>
 </tr>
 <tr>
-<td>MD</td>
+<td>MD Mazadul</td>
 <td><code>frontend/</code> (sign-in, admin and student pages), query route, CloudWatch alarms (<code>alarms.tf</code>), CloudWatch dashboard (<code>cloudwatch.tf</code>)</td>
 <td>Frontend explainer, CloudWatch explainer, troubleshooting runbook, evidence checklist</td>
 <td>Dashboard deployment, evidence collection</td>

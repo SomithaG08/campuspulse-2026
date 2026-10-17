@@ -6,7 +6,7 @@
 Big Data & Cloud Computing — Final Project S2 2026
 EPITA, Academic Year 2025-2026
 
-**Team:** Somitha Gudivada · Meha · Madhavan · MD
+**Team:** Somitha Gudivada · Manimegalai · Madhavan · MD Mazadul
 **Cloud provider:** Amazon Web Services · **Region:** eu-west-3 (Paris)
 **Repository:** `https://github.com/SomithaG08/campuspulse-2026`
 **Deployed API:** `https://wsjs04q4yi.execute-api.eu-west-3.amazonaws.com/`
@@ -46,9 +46,9 @@ Each member owns one area end to end — building it, writing its learning docum
 | Member | Area | Components |
 |---|---|---|
 | Somitha Gudivada | Architecture and ingestion | Ingest and stats routes, severity rules, shared campus configuration, VPC and backup infrastructure |
-| Meha | Identity and security | Cognito (admin/student groups), the auth function, IAM policies, threat model |
+| Manimegalai | Identity and security | Cognito (admin/student groups), the auth function, IAM policies, threat model |
 | Madhavan | Data generation and testing | Simulator, test suites, demo script |
-| MD | Interface and observability | Admin and student pages, query and requests routes, CloudWatch alarms, team email alerts, evidence |
+| MD Mazadul | Interface and observability | Admin and student pages, query and requests routes, CloudWatch alarms, team email alerts, evidence |
 
 Two rules governed the split: **you write the documentation for what you own**, because writing the explanation is how you discover whether you understand it; and **nobody presents a component they did not build**.
 
@@ -635,11 +635,11 @@ In the order we would actually do them: CloudFront in front of the pages for HTT
 
 **Somitha Gudivada:** Building the ingestion pipeline taught me how much of a real system lives in the details between components — not in any single Lambda function, but in the contract between the simulator, the validator, and the database schema. Writing the Terraform deployment from scratch made the IAM trust model concrete in a way documentation never had. The biggest surprise was how much a careful data model decision (partition key choice, TTL) shapes every query that comes after it.
 
-**Meha:** Implementing Cognito and the JWT authorizer showed me that identity is infrastructure — a misconfigured Cognito pool or a missing `sub` claim breaks the entire system before any business logic runs. The gap between "authentication works" and "authorization is correct" became very clear when we had to audit every route for missing group checks. Threat modelling a system I built myself was harder than expected: you naturally miss the risks you designed around.
+**Manimegalai:** Implementing Cognito and the JWT authorizer showed me that identity is infrastructure — a misconfigured Cognito pool or a missing `sub` claim breaks the entire system before any business logic runs. The gap between "authentication works" and "authorization is correct" became very clear when we had to audit every route for missing group checks. Threat modelling a system I built myself was harder than expected: you naturally miss the risks you designed around.
 
 **Madhavan:** Writing the simulator made me think about what a real IoT device sends — not just valid events, but edge cases like missing fields, duplicate IDs, and bursts. The API test suite forced us to be explicit about every assumption the backend makes, which surfaced three validation gaps we hadn't caught in unit tests. Running the demo end-to-end was the moment the system felt real.
 
-**MD:** Building the dashboard showed how much the frontend experience depends on API design decisions made weeks earlier — a small change in the response shape breaks the chart. Setting up CloudWatch alarms taught me to think in thresholds before deployment, not after something breaks. The evidence collection process was unexpectedly useful: screenshots taken while testing became the clearest proof of what the system actually does.
+**MD Mazadul:** Building the dashboard showed how much the frontend experience depends on API design decisions made weeks earlier — a small change in the response shape breaks the chart. Setting up CloudWatch alarms taught me to think in thresholds before deployment, not after something breaks. The evidence collection process was unexpectedly useful: screenshots taken while testing became the clearest proof of what the system actually does.
 
 ---
 
@@ -648,9 +648,9 @@ In the order we would actually do them: CloudFront in front of the pages for HTT
 | Member | Components built | Documentation written | Other | Share |
 |---|---|---|---|---|
 | Somitha Gudivada | ingest and stats routes, `common/rules.py`, `common/validation.py`, `common/aggregate.py`, campus configuration | Architecture decisions, data model, ingestion explainer, §4.3 issues | Terraform deployment, AWS account setup, git branching | 25% |
-| Meha | the auth function, `common/auth.py`, Cognito Terraform (`cognito.tf`), IAM policies (`iam.tf`) | Threat model, Cognito explainer, IAM explainer, security section | IAM audit, security review | 25% |
+| Manimegalai | the auth function, `common/auth.py`, Cognito Terraform (`cognito.tf`), IAM policies (`iam.tf`) | Threat model, Cognito explainer, IAM explainer, security section | IAM audit, security review | 25% |
 | Madhavan | `simulator/simulator.py`, simulator tests, `tests/api/run_api_tests.py` | Simulator explainer, test plan, demo runbook | API test execution, demo preparation | 25% |
-| MD | `frontend/` (sign-in, admin and student pages), query route, CloudWatch alarms (`alarms.tf`), CloudWatch dashboard (`cloudwatch.tf`) | Frontend explainer, CloudWatch explainer, troubleshooting runbook, evidence checklist | Dashboard deployment, evidence collection | 25% |
+| MD Mazadul | `frontend/` (sign-in, admin and student pages), query route, CloudWatch alarms (`alarms.tf`), CloudWatch dashboard (`cloudwatch.tf`) | Frontend explainer, CloudWatch explainer, troubleshooting runbook, evidence checklist | Dashboard deployment, evidence collection | 25% |
 
 
 ---

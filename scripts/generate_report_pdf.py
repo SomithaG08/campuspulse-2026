@@ -593,7 +593,7 @@ hr {{
     <div class="cover-footer">
         <div>
             <div class="meta-label" style="color: #94A3B8;">Project Engineering Team</div>
-            <div class="team-members-list">Somitha Gudivada · Meha · Madhavan · MD</div>
+            <div class="team-members-list">Somitha Gudivada · Manimegalai · Madhavan · MD Mazadul</div>
         </div>
         <div style="text-align: right;">
             <div style="font-weight: 600; color: #FFFFFF;">NorthBridge University Prototype</div>
